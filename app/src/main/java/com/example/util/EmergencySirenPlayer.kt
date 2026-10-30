@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.ToneGenerator
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.*
@@ -13,8 +14,8 @@ import kotlin.math.sin
 object EmergencySirenPlayer {
 
     private const val TAG = "EmergencySirenPlayer"
-    private const val SAMPLE_RATE = 44100
     private var audioTrack: AudioTrack? = null
+    private var toneGenerator: ToneGenerator? = null
     private var sirenJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -29,7 +30,6 @@ object EmergencySirenPlayer {
 
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            // Request high volume for emergency alarm
             audioManager?.let { am ->
                 val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                 am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
@@ -39,64 +39,110 @@ object EmergencySirenPlayer {
         }
 
         sirenJob = scope.launch {
-            try {
-                val bufferSize = AudioTrack.getMinBufferSize(
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                ).coerceAtLeast(SAMPLE_RATE / 4)
+            var trackCreated = false
 
-                val attributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
+            // Try candidate sample rates supported by Android audio HALs
+            val candidateSampleRates = intArrayOf(44100, 48000, 16000)
 
-                val format = AudioFormat.Builder()
-                    .setSampleRate(SAMPLE_RATE)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .build()
+            for (sampleRate in candidateSampleRates) {
+                if (!isActive || !isPlaying) break
 
-                audioTrack = AudioTrack(
-                    attributes,
-                    format,
-                    bufferSize,
-                    AudioTrack.MODE_STREAM,
-                    AudioManager.AUDIO_SESSION_ID_GENERATE
-                )
+                try {
+                    val rawMin = AudioTrack.getMinBufferSize(
+                        sampleRate,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT
+                    )
 
-                audioTrack?.play()
+                    // Critical fix: buffer size in bytes must be positive, >= minBufferSize,
+                    // and strictly divisible by 2 (the 16-bit PCM mono frame size)
+                    val baseMin = if (rawMin > 0) rawMin else 8192
+                    val bufferSizeInBytes = ((baseMin * 2).coerceAtLeast(8192) / 4) * 4
 
-                // Generate loud oscillating siren PCM data (750 Hz to 1250 Hz wailing siren wave)
-                val chunkSamples = SAMPLE_RATE / 10 // 100ms chunk
-                val pcmBuffer = ShortArray(chunkSamples)
-                var phase = 0.0
-                var step = 0
-
-                while (isActive && isPlaying) {
-                    // Oscillate frequency smoothly between 700 Hz and 1300 Hz
-                    val cycleProgress = (step % 40) / 40.0 // 4.0 second sweep cycle
-                    val frequency = 750.0 + 550.0 * sin(cycleProgress * 2.0 * Math.PI)
-
-                    val phaseIncrement = 2.0 * Math.PI * frequency / SAMPLE_RATE
-
-                    for (i in 0 until chunkSamples) {
-                        phase += phaseIncrement
-                        if (phase > 2.0 * Math.PI) {
-                            phase -= 2.0 * Math.PI
-                        }
-                        // Maximum amplitude (Short.MAX_VALUE = 32767) for maximum loud piercing alarm sound
-                        pcmBuffer[i] = (sin(phase) * 32000.0).toInt().toShort()
+                    val track = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        AudioTrack.Builder()
+                            .setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ALARM)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build()
+                            )
+                            .setAudioFormat(
+                                AudioFormat.Builder()
+                                    .setSampleRate(sampleRate)
+                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .build()
+                            )
+                            .setBufferSizeInBytes(bufferSizeInBytes)
+                            .setTransferMode(AudioTrack.MODE_STREAM)
+                            .build()
+                    } else {
+                        @Suppress("DEPRECATION")
+                        AudioTrack(
+                            AudioManager.STREAM_ALARM,
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            bufferSizeInBytes,
+                            AudioTrack.MODE_STREAM
+                        )
                     }
 
-                    audioTrack?.write(pcmBuffer, 0, chunkSamples)
-                    step++
+                    if (track.state != AudioTrack.STATE_INITIALIZED) {
+                        track.release()
+                        continue
+                    }
+
+                    audioTrack = track
+                    audioTrack?.play()
+                    trackCreated = true
+
+                    // Generate loud oscillating siren PCM data (750 Hz to 1300 Hz wailing siren wave)
+                    val chunkSamples = (sampleRate / 10 / 2) * 2 // 100ms chunk, even length
+                    val pcmBuffer = ShortArray(chunkSamples)
+                    var phase = 0.0
+                    var step = 0
+
+                    while (isActive && isPlaying) {
+                        // Oscillate frequency smoothly between 700 Hz and 1300 Hz
+                        val cycleProgress = (step % 30) / 30.0 // 3.0 second sweep cycle
+                        val frequency = 750.0 + 550.0 * sin(cycleProgress * 2.0 * Math.PI)
+                        val phaseIncrement = 2.0 * Math.PI * frequency / sampleRate
+
+                        for (i in 0 until chunkSamples) {
+                            phase += phaseIncrement
+                            if (phase > 2.0 * Math.PI) {
+                                phase -= 2.0 * Math.PI
+                            }
+                            // Maximum amplitude for loud piercing alarm sound
+                            pcmBuffer[i] = (sin(phase) * 32000.0).toInt().coerceIn(-32767, 32767).toShort()
+                        }
+
+                        audioTrack?.write(pcmBuffer, 0, chunkSamples)
+                        step++
+                    }
+                    break // Successfully played
+                } catch (e: Exception) {
+                    Log.w(TAG, "AudioTrack init failed with sampleRate $sampleRate: ${e.message}")
+                    cleanUpTrack()
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error playing siren audio: ${e.message}")
-            } finally {
-                cleanUpTrack()
             }
+
+            // Fallback to ToneGenerator if AudioTrack could not be initialized in emulator
+            if (!trackCreated && isPlaying) {
+                try {
+                    toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+                    while (isActive && isPlaying) {
+                        toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 1000)
+                        delay(1050)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "ToneGenerator fallback error: ${e.message}")
+                }
+            }
+
+            cleanUpTrack()
         }
     }
 
@@ -109,8 +155,15 @@ object EmergencySirenPlayer {
 
     private fun cleanUpTrack() {
         try {
+            toneGenerator?.release()
+        } catch (_: Exception) {
+        } finally {
+            toneGenerator = null
+        }
+
+        try {
             audioTrack?.apply {
-                if (playState == AudioTrack.PLAYSTATE_PLAYING) {
+                if (state == AudioTrack.STATE_INITIALIZED && playState == AudioTrack.PLAYSTATE_PLAYING) {
                     stop()
                 }
                 release()
