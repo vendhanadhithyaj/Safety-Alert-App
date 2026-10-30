@@ -1,0 +1,6 @@
+{
+  "name": "SAFEGUARD",
+  "description": "Tamil Nadu Emergency & Community Safety platform with 1-tap SOS, real GPS location, community hazard reports, and responder network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
