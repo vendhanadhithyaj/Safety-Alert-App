@@ -66,6 +66,10 @@ fun MapScreen(
     var selectedZone by remember { mutableStateOf<DangerZone?>(null) }
     var showShareSheet by remember { mutableStateOf(false) }
 
+    val requestLocationPermission = com.example.ui.components.rememberLocationPermissionLauncher { granted, _ ->
+        viewModel.onLocationPermissionResult(granted)
+    }
+
     val activeShare = activeLiveShares.firstOrNull { it.isActive && it.expiresAtEpoch > System.currentTimeMillis() }
 
     Column(
@@ -73,6 +77,14 @@ fun MapScreen(
             .fillMaxSize()
             .background(SlateLight)
     ) {
+        // Location Permission Banner if not granted
+        com.example.ui.components.LocationPermissionCard(
+            hasPermission = uiState.hasLocationPermission,
+            onRequestPermission = requestLocationPermission,
+            title = "Enable GPS for Exact Map Navigation",
+            description = "High-accuracy geolocation is needed to render your live positioning beacon and compute distances to danger zones in Kumbakonam."
+        )
+
         // Active Live Location Sharing Alert Banner (if currently sharing)
         AnimatedVisibility(visible = activeShare != null) {
             if (activeShare != null) {

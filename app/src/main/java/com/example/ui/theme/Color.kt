@@ -24,12 +24,24 @@ val SafeGreen = Color(0xFF10B981)
 val SafeGreenDark = Color(0xFF059669)
 val SafeGreenLight = Color(0xFFD1FAE5)
 
+// High-contrast Light Mode neutrals
 val SlateLight = Color(0xFFF8FAFC)
-val SlateBorder = Color(0xFFE2E8F0)
-val SlateTextDark = Color(0xFF0F172A)
-val SlateTextMuted = Color(0xFF64748B)
+val SlateBorder = Color(0xFFCBD5E1) // Enhanced contrast (was E2E8F0)
+val SlateBorderDark = Color(0xFF334155)
+val SlateTextDark = Color(0xFF0F172A) // Bold deep navy/slate
+val SlateTextSecondary = Color(0xFF334155) // High contrast secondary
+val SlateTextMuted = Color(0xFF475569) // Darker slate for high contrast (was faint 64748B)
+
+// High-contrast Dark Mode neutrals
+val DarkBackground = Color(0xFF060E1A)
+val DarkSurface = Color(0xFF0F1E33)
+val DarkSurfaceVariant = Color(0xFF162D4D)
+val DarkTextPrimary = Color(0xFFF8FAFC)
+val DarkTextSecondary = Color(0xFFCBD5E1)
+val DarkBorder = Color(0xFF2E4B75)
 
 // M3 Theme tokens
 val PrimaryBlue = Color(0xFF0F2C59)
+val PrimaryBlueLight = Color(0xFFE8EEF5)
 val SecondaryTeal = Color(0xFF0077B6)
 val TertiaryRed = Color(0xFFD32F2F)

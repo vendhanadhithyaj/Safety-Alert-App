@@ -47,17 +47,14 @@ fun SosScreen(
     val context = LocalContext.current
     val activeSos by viewModel.activeSos.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
+    val buddies by viewModel.buddies.collectAsState()
 
     var selectedEmergencyType by remember { mutableStateOf("Physical Danger / Imminent Attack") }
     var showLocationSelector by remember { mutableStateOf(false) }
 
-    // Google Play Services Location Permission Request Launcher
-    val locationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
-        val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        viewModel.onLocationPermissionResult(fineGranted || coarseGranted)
+    // Reusable Jetpack Compose Runtime Permission Launcher
+    val requestLocationPermission = com.example.ui.components.rememberLocationPermissionLauncher { granted, _ ->
+        viewModel.onLocationPermissionResult(granted)
     }
 
     // Pulsing animation for the SOS button
@@ -75,7 +72,7 @@ fun SosScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(SlateLight)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -84,7 +81,8 @@ fun SosScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
             elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Row(
@@ -102,7 +100,7 @@ fun SosScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(SafetyTealLight),
                         contentAlignment = Alignment.Center
@@ -111,7 +109,7 @@ fun SosScreen(
                             imageVector = Icons.Default.MyLocation,
                             contentDescription = "GPS Location",
                             tint = SafetyTealDark,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -119,19 +117,19 @@ fun SosScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "CURRENT LOCATION",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = SafetyTealDark,
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Change", tint = SlateTextMuted, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Change", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                         Text(
                             text = uiState.currentLocation.landmark,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SlateTextDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1
                         )
                     }
@@ -142,10 +140,10 @@ fun SosScreen(
                     FilledTonalIconButton(
                         onClick = { viewModel.toggleStrobeFlashlight() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = if (uiState.isStrobeActive) WarningAmberLight else SlateBorder.copy(alpha = 0.4f),
-                            contentColor = if (uiState.isStrobeActive) WarningAmber else SlateTextDark
+                            containerColor = if (uiState.isStrobeActive) WarningAmberLight else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (uiState.isStrobeActive) WarningAmber else MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.size(40.dp).testTag("button_strobe_flashlight")
+                        modifier = Modifier.size(44.dp).testTag("button_strobe_flashlight")
                     ) {
                         Icon(Icons.Default.FlashlightOn, contentDescription = "Flashlight Strobe")
                     }
@@ -153,10 +151,10 @@ fun SosScreen(
                     FilledTonalIconButton(
                         onClick = { viewModel.toggleSirenSound() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = if (uiState.isSirenPlaying) EmergencyRedLight else SlateBorder.copy(alpha = 0.4f),
-                            contentColor = if (uiState.isSirenPlaying) EmergencyRed else SlateTextDark
+                            containerColor = if (uiState.isSirenPlaying) EmergencyRedLight else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (uiState.isSirenPlaying) EmergencyRed else MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.size(40.dp).testTag("button_siren_alarm")
+                        modifier = Modifier.size(44.dp).testTag("button_siren_alarm")
                     ) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Siren Alert")
                     }
@@ -166,76 +164,26 @@ fun SosScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Google Play Services Runtime Permission & Tracking Card
-        if (!uiState.hasLocationPermission) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = WarningAmberLight),
-                border = androidx.compose.foundation.BorderStroke(1.dp, WarningAmber)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationSearching,
-                            contentDescription = null,
-                            tint = WarningAmber,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Explicit GPS Permission Required",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = SafeguardNavy
-                            )
-                            Text(
-                                text = "Activate Google Play Services to track real-time coordinates during emergencies.",
-                                fontSize = 11.sp,
-                                color = SlateTextDark,
-                                lineHeight = 14.sp
-                            )
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                    android.Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp).testTag("button_grant_gps_permission")
-                    ) {
-                        Text("Grant GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-        } else {
-            // Live Play Services Tracking Status
+        // Reusable Jetpack Compose Location Permission Card
+        com.example.ui.components.LocationPermissionCard(
+            hasPermission = uiState.hasLocationPermission,
+            onRequestPermission = requestLocationPermission,
+            title = "High-Accuracy GPS Required for SOS",
+            description = "Sub-10m geolocation is needed to dispatch Tamil Nadu 112 responders and alert your Buddy Network with turn-by-turn directions."
+        )
+
+        if (uiState.hasLocationPermission) {
+            // Live Play Services Tracking & Background Service Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, SafeGreen.copy(alpha = 0.5f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -247,32 +195,50 @@ fun SosScreen(
                             modifier = Modifier
                                 .size(10.dp)
                                 .clip(CircleShape)
-                                .background(if (uiState.isRealtimeTrackingActive) SafeGreen else SlateBorder)
+                                .background(if (uiState.isRealtimeTrackingActive) SafeGreen else MaterialTheme.colorScheme.outline)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text(
-                                text = if (uiState.isRealtimeTrackingActive) "GOOGLE PLAY SERVICES: REAL-TIME TRACKING ACTIVE" else "GPS STANDBY",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (uiState.isRealtimeTrackingActive) SafeGreenDark else SlateTextMuted
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (uiState.isRealtimeTrackingActive) "GPS: REAL-TIME TRACKING ACTIVE" else "GPS STANDBY",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (uiState.isRealtimeTrackingActive) SafeGreenDark else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (uiState.isForegroundServiceRunning) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = SafeGreenLight
+                                    ) {
+                                        Text(
+                                            text = "FOREGROUND SERVICE ON",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SafeGreenDark,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Text(
                                 text = "Lat: ${"%.4f".format(uiState.currentLocation.latitude)}, Lng: ${"%.4f".format(uiState.currentLocation.longitude)} • ${uiState.currentLocation.district}",
-                                fontSize = 11.sp,
-                                color = SlateTextDark
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
 
                     TextButton(
                         onClick = { viewModel.toggleRealtimeTracking() },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = if (uiState.isRealtimeTrackingActive) "Pause GPS" else "Resume GPS",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = SafetyTealDark
                         )
                     }
@@ -280,6 +246,58 @@ fun SosScreen(
             }
             Spacer(modifier = Modifier.height(10.dp))
         }
+
+        // Buddy Network Guard Status Pill
+        val activeBuddyCount = buddies.count { it.isTrustedForSos }
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { viewModel.setPeopleTab(com.example.ui.PeopleTab.CIRCLES) }
+                .testTag("card_sos_buddy_status"),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = SafeguardNavyCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Diversity3,
+                        contentDescription = null,
+                        tint = SafetyTeal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "BUDDY PROTECTION: $activeBuddyCount GUARDIANS ARMED",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Manage",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyTeal
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = SafetyTeal,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
 
         // If an SOS is currently active, display the Real-Time Truth Tracker!
         if (activeSos != null) {
@@ -308,16 +326,16 @@ fun SosScreen(
         // Emergency Type Selector
         Text(
             text = "SELECT EMERGENCY TYPE",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = SlateTextMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             letterSpacing = 1.sp,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             EmergencyTypeChip(
                 label = "Physical Danger",
@@ -361,25 +379,26 @@ fun SosScreen(
                 ) {
                     Text(
                         text = "EMERGENCY ALERT TRIGGERING IN",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
                         letterSpacing = 1.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "${uiState.sosCountdownSeconds}",
                         fontSize = 72.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Black,
                         color = Color.White
                     )
                     Text(
                         text = "Notifying Tamil Nadu Police, Responders & Emergency Contacts with live coordinates...",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -390,14 +409,14 @@ fun SosScreen(
                             border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
                             modifier = Modifier.weight(1f).testTag("button_cancel_sos")
                         ) {
-                            Text("Cancel Alert", fontWeight = FontWeight.Bold)
+                            Text("Cancel Alert", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                         }
                         Button(
                             onClick = { viewModel.triggerInstantSos(selectedEmergencyType) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = EmergencyRed),
                             modifier = Modifier.weight(1f).testTag("button_instant_send_sos")
                         ) {
-                            Text("Send Now!", fontWeight = FontWeight.Bold)
+                            Text("Send Now!", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                         }
                     }
                 }
@@ -446,33 +465,33 @@ fun SosScreen(
                         Text(
                             text = "SOS",
                             fontSize = 34.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontWeight = FontWeight.Black,
                             color = Color.White,
                             letterSpacing = 1.sp
                         )
                         Text(
                             text = "ONE TAP ALERT",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.9f)
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
                         )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         // Direct Call India 112 & Helplines (Crucial for emergencies!)
         Text(
             text = "OFFICIAL DIRECT EMERGENCY DIALERS",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = SlateTextMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             letterSpacing = 1.sp,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Primary 112 Banner
         Button(
@@ -492,7 +511,7 @@ fun SosScreen(
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "CALL 112 (INDIA EMERGENCY HELPLINE)",
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     fontSize = 14.sp,
                     color = Color.White
                 )
@@ -535,14 +554,15 @@ fun SosScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(1.dp)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+            elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(SafeGreenLight),
                         contentAlignment = Alignment.Center
@@ -554,13 +574,13 @@ fun SosScreen(
                         Text(
                             text = "WhatsApp & SMS Emergency Broadcast",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = SafeguardNavy
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Instantly sends your live GPS coordinates & message to contacts",
-                            fontSize = 11.sp,
-                            color = SlateTextMuted
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -582,7 +602,7 @@ fun SosScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Broadcast Location to WhatsApp / Contacts", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Broadcast Location to WhatsApp / Contacts", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -672,11 +692,11 @@ private fun EmergencyTypeChip(
             .clickable(onClick = onClick)
             .border(
                 width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) EmergencyRed else SlateBorder,
+                color = if (isSelected) EmergencyRed else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(10.dp)
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) EmergencyRedLight else Color.White
+            containerColor = if (isSelected) EmergencyRedLight else MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -686,15 +706,15 @@ private fun EmergencyTypeChip(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) EmergencyRed else SlateTextMuted,
-                modifier = Modifier.size(20.dp)
+                tint = if (isSelected) EmergencyRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
-                fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) EmergencyRedDark else SlateTextDark,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = if (isSelected) EmergencyRedDark else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
@@ -714,13 +734,13 @@ private fun HelplineButton(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.5f)),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.7f)),
         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
         modifier = modifier
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("Tap to call", fontSize = 9.sp, color = SlateTextMuted)
+            Text(title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            Text("Tap to call", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -738,7 +758,7 @@ private fun ActiveSosTrackerCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = androidx.compose.foundation.BorderStroke(2.dp, EmergencyRed),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
@@ -760,16 +780,16 @@ private fun ActiveSosTrackerCard(
                     Text(
                         text = "ACTIVE SOS INCIDENT",
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         color = EmergencyRed,
                         letterSpacing = 1.sp
                     )
                 }
                 Text(
                     text = incident.id,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = SafeguardNavy
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -778,26 +798,27 @@ private fun ActiveSosTrackerCard(
             // Details
             Text(
                 text = "${incident.emergencyType} • $formattedTime",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = SlateTextDark
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = "📍 ${incident.location.landmark}, ${incident.location.district}",
-                fontSize = 12.sp,
-                color = SlateTextMuted
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = SlateBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(12.dp))
 
             // Truthful Progression Vertical Stepper
             Text(
                 text = "TRUTHFUL INCIDENT STATUS PROGRESSION",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = SlateTextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 0.5.sp
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -849,7 +870,7 @@ private fun ActiveSosTrackerCard(
                 ) {
                     Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Google Maps", fontSize = 11.sp)
+                    Text("Google Maps", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = onBroadcast,
@@ -858,7 +879,7 @@ private fun ActiveSosTrackerCard(
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Broadcast", fontSize = 11.sp)
+                    Text("Broadcast", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -867,7 +888,7 @@ private fun ActiveSosTrackerCard(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("Dismiss / Close Alert View", color = SlateTextMuted, fontSize = 11.sp)
+                Text("Dismiss / Close Alert View", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -888,27 +909,27 @@ private fun TruthfulStatusStep(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(20.dp)
                     .clip(CircleShape)
                     .background(
                         when {
                             isActive -> EmergencyRed
                             isCompleted -> SafeGreenDark
-                            else -> SlateBorder
+                            else -> MaterialTheme.colorScheme.outline
                         }
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 if (isCompleted) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
                 }
             }
             if (!isFinal) {
                 Box(
                     modifier = Modifier
                         .width(2.dp)
-                        .height(20.dp)
-                        .background(if (isCompleted) SafeGreenDark else SlateBorder)
+                        .height(22.dp)
+                        .background(if (isCompleted) SafeGreenDark else MaterialTheme.colorScheme.outline)
                 )
             }
         }
@@ -916,15 +937,16 @@ private fun TruthfulStatusStep(
         Column {
             Text(
                 text = title,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = if (isActive || isCompleted) FontWeight.Bold else FontWeight.Medium,
-                color = if (isActive) EmergencyRedDark else if (isCompleted) SlateTextDark else SlateTextMuted
+                color = if (isActive) EmergencyRedDark else if (isCompleted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = subtitle,
-                fontSize = 10.sp,
-                color = SlateTextMuted,
-                lineHeight = 12.sp
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 14.sp
             )
         }
     }

@@ -42,8 +42,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            MyApplicationTheme {
-                SafeguardApp(viewModel)
+            val uiState by viewModel.uiState.collectAsState()
+            MyApplicationTheme(themeMode = uiState.themeMode) {
+                if (uiState.isEntranceVisible) {
+                    EntranceScreen(
+                        viewModel = viewModel,
+                        onEnterApp = { viewModel.dismissEntrance() }
+                    )
+                } else {
+                    SafeguardApp(viewModel)
+                }
             }
         }
     }
@@ -72,10 +80,14 @@ fun SafeguardApp(viewModel: SafeguardViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             SafeguardTopAppBar(
                 currentPortal = uiState.currentPortal,
+                themeMode = uiState.themeMode,
+                onToggleTheme = { viewModel.toggleThemeMode() },
+                onShowEntrance = { viewModel.showEntrance() },
                 onOpenPortalSwitch = { viewModel.showPortalDialog(true) }
             )
         },
@@ -203,11 +215,14 @@ fun SafeguardApp(viewModel: SafeguardViewModel) {
 @Composable
 fun SafeguardTopAppBar(
     currentPortal: AppPortal,
+    themeMode: ThemeMode,
+    onToggleTheme: () -> Unit,
+    onShowEntrance: () -> Unit,
     onOpenPortalSwitch: () -> Unit
 ) {
     Surface(
         color = SafeguardNavy,
-        shadowElevation = 4.dp,
+        shadowElevation = 6.dp,
         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
     ) {
         Row(
@@ -217,51 +232,129 @@ fun SafeguardTopAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // App Branding & Slogan
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Official Safeguard Logo Drawable
-                Image(
-                    painter = painterResource(id = R.drawable.safeguard_logo),
-                    contentDescription = "SAFEGUARD Logo",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .height(36.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                )
+            // App Branding & Slogan (Clickable to view Entrance/About screen)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onShowEntrance)
+                    .padding(4.dp)
+                    .testTag("app_bar_brand_header")
+            ) {
+                // Official Safeguard Logo in a clean white rounded pill
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.height(38.dp).width(58.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.safeguard_logo),
+                        contentDescription = "SAFEGUARD Logo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().padding(3.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "SAFEGUARD",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            color = EmergencyRed,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "TN",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "One tap to alert. A network to protect.",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFCBD5E1)
+                    )
+                }
             }
 
-            // Portal Switcher Pill Badge
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onOpenPortalSwitch)
-                    .testTag("portal_switcher_badge"),
-                color = if (currentPortal == AppPortal.PEOPLE) SafetyTealDark else EmergencyRed
+            // Right Actions: Theme Toggle + Portal Switcher
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Theme Mode Switcher
+                IconButton(
+                    onClick = onToggleTheme,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.15f))
+                        .testTag("theme_toggle_button")
                 ) {
                     Icon(
-                        imageVector = if (currentPortal == AppPortal.PEOPLE) Icons.Default.People else Icons.Default.AdminPanelSettings,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        imageVector = when (themeMode) {
+                            ThemeMode.DARK -> Icons.Default.LightMode
+                            ThemeMode.LIGHT -> Icons.Default.DarkMode
+                            ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                        },
+                        contentDescription = "Toggle Theme (Current: $themeMode)",
+                        tint = when (themeMode) {
+                            ThemeMode.DARK -> Color(0xFFFBBF24)
+                            ThemeMode.LIGHT -> Color(0xFF38BDF8)
+                            ThemeMode.SYSTEM -> Color.White
+                        },
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (currentPortal == AppPortal.PEOPLE) "PEOPLE" else "NETWORK",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Icon(
-                        imageVector = Icons.Default.SwapHoriz,
-                        contentDescription = "Switch Portal",
-                        tint = Color.White,
-                        modifier = Modifier.size(14.dp)
-                    )
+                }
+
+                // Portal Switcher Pill Badge
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = onOpenPortalSwitch)
+                        .testTag("portal_switcher_badge"),
+                    color = if (currentPortal == AppPortal.PEOPLE) SafetyTealDark else EmergencyRed,
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (currentPortal == AppPortal.PEOPLE) Icons.Default.People else Icons.Default.AdminPanelSettings,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (currentPortal == AppPortal.PEOPLE) "PEOPLE" else "NETWORK",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Switch Portal",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
             }
         }
@@ -274,11 +367,13 @@ fun SafeguardBottomNavigation(
     onSelectTab: (PeopleTab) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color.White,
-        contentColor = SafeguardNavy,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 8.dp,
         modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
     ) {
+        val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+
         NavigationBarItem(
             selected = selectedTab == PeopleTab.SOS,
             onClick = { onSelectTab(PeopleTab.SOS) },
@@ -286,18 +381,20 @@ fun SafeguardBottomNavigation(
                 Icon(
                     imageVector = Icons.Default.Campaign,
                     contentDescription = "SOS Alert",
-                    tint = if (selectedTab == PeopleTab.SOS) EmergencyRed else SlateTextMuted
+                    tint = if (selectedTab == PeopleTab.SOS) EmergencyRed else unselectedColor,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             label = {
                 Text(
                     text = "SOS",
-                    fontWeight = if (selectedTab == PeopleTab.SOS) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp
+                    fontWeight = if (selectedTab == PeopleTab.SOS) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedTab == PeopleTab.SOS) EmergencyRed else unselectedColor
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                indicatorColor = EmergencyRedLight
+                indicatorColor = MaterialTheme.colorScheme.tertiaryContainer
             ),
             modifier = Modifier.testTag("nav_item_sos")
         )
@@ -309,18 +406,20 @@ fun SafeguardBottomNavigation(
                 Icon(
                     imageVector = Icons.Default.Map,
                     contentDescription = "Radar Map",
-                    tint = if (selectedTab == PeopleTab.MAP) SafetyTealDark else SlateTextMuted
+                    tint = if (selectedTab == PeopleTab.MAP) SafetyTeal else unselectedColor,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             label = {
                 Text(
                     text = "Map",
-                    fontWeight = if (selectedTab == PeopleTab.MAP) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp
+                    fontWeight = if (selectedTab == PeopleTab.MAP) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedTab == PeopleTab.MAP) SafetyTeal else unselectedColor
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                indicatorColor = SafetyTealLight
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
             ),
             modifier = Modifier.testTag("nav_item_map")
         )
@@ -332,18 +431,20 @@ fun SafeguardBottomNavigation(
                 Icon(
                     imageVector = Icons.Default.Report,
                     contentDescription = "Report Hazard",
-                    tint = if (selectedTab == PeopleTab.REPORT) PrimaryBlue else SlateTextMuted
+                    tint = if (selectedTab == PeopleTab.REPORT) SafetyTeal else unselectedColor,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             label = {
                 Text(
                     text = "Report",
-                    fontWeight = if (selectedTab == PeopleTab.REPORT) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp
+                    fontWeight = if (selectedTab == PeopleTab.REPORT) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedTab == PeopleTab.REPORT) SafetyTeal else unselectedColor
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                indicatorColor = SafetyTealLight
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
             ),
             modifier = Modifier.testTag("nav_item_report")
         )
@@ -355,18 +456,20 @@ fun SafeguardBottomNavigation(
                 Icon(
                     imageVector = Icons.Default.Groups,
                     contentDescription = "Safety Circles",
-                    tint = if (selectedTab == PeopleTab.CIRCLES) PrimaryBlue else SlateTextMuted
+                    tint = if (selectedTab == PeopleTab.CIRCLES) SafetyTeal else unselectedColor,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             label = {
                 Text(
                     text = "Circles",
-                    fontWeight = if (selectedTab == PeopleTab.CIRCLES) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp
+                    fontWeight = if (selectedTab == PeopleTab.CIRCLES) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedTab == PeopleTab.CIRCLES) SafetyTeal else unselectedColor
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                indicatorColor = SafetyTealLight
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
             ),
             modifier = Modifier.testTag("nav_item_circles")
         )
@@ -378,18 +481,20 @@ fun SafeguardBottomNavigation(
                 Icon(
                     imageVector = Icons.Default.ContactPhone,
                     contentDescription = "Emergency Directory",
-                    tint = if (selectedTab == PeopleTab.DIRECTORY) PrimaryBlue else SlateTextMuted
+                    tint = if (selectedTab == PeopleTab.DIRECTORY) SafetyTeal else unselectedColor,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             label = {
                 Text(
                     text = "Directory",
-                    fontWeight = if (selectedTab == PeopleTab.DIRECTORY) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp
+                    fontWeight = if (selectedTab == PeopleTab.DIRECTORY) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedTab == PeopleTab.DIRECTORY) SafetyTeal else unselectedColor
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                indicatorColor = SafetyTealLight
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
             ),
             modifier = Modifier.testTag("nav_item_directory")
         )

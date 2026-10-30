@@ -35,6 +35,12 @@ object SafeguardRepository {
     private val _auditLogs = MutableStateFlow<List<AuditLogEntry>>(emptyList())
     val auditLogs: StateFlow<List<AuditLogEntry>> = _auditLogs.asStateFlow()
 
+    private val _buddies = MutableStateFlow<List<BuddyMember>>(emptyList())
+    val buddies: StateFlow<List<BuddyMember>> = _buddies.asStateFlow()
+
+    private val _incomingBuddySosAlert = MutableStateFlow<BuddySosAlert?>(null)
+    val incomingBuddySosAlert: StateFlow<BuddySosAlert?> = _incomingBuddySosAlert.asStateFlow()
+
     init {
         seedInitialData()
     }
@@ -157,6 +163,54 @@ object SafeguardRepository {
                 senderRole = "Community Patrol",
                 message = "Cauvery bridge path well-lit today. Volunteer team stationed at bus depot.",
                 timestamp = System.currentTimeMillis() - 1200000L
+            )
+        )
+
+        // Seed initial trusted buddies
+        _buddies.value = listOf(
+            BuddyMember(
+                id = "bud-01",
+                name = "Ramanathan S. (Appa)",
+                phone = "+91 94431 88990",
+                relation = BuddyRelation.PARENT,
+                status = BuddyStatus.ACTIVE,
+                isTrustedForSos = true,
+                canViewLiveLocation = true,
+                lastCheckIn = "10m ago • Home (Kumbakonam West)",
+                inviteCode = "SG-TN-8890"
+            ),
+            BuddyMember(
+                id = "bud-02",
+                name = "Priya Venkatesh",
+                phone = "+91 98842 55667",
+                relation = BuddyRelation.CLASSMATE,
+                status = BuddyStatus.ACTIVE,
+                isTrustedForSos = true,
+                canViewLiveLocation = true,
+                lastCheckIn = "25m ago • Central College Library",
+                inviteCode = "SG-TN-5566"
+            ),
+            BuddyMember(
+                id = "bud-03",
+                name = "S. Geetha Teacher",
+                phone = "+91 94422 11002",
+                relation = BuddyRelation.TEACHER,
+                status = BuddyStatus.ACTIVE,
+                isTrustedForSos = true,
+                canViewLiveLocation = false,
+                lastCheckIn = "1h ago • Staff Quarters",
+                inviteCode = "SG-TN-1100"
+            ),
+            BuddyMember(
+                id = "bud-04",
+                name = "Dinesh Kumar (Neighborhood)",
+                phone = "+91 97890 12345",
+                relation = BuddyRelation.COMMUNITY_WATCH,
+                status = BuddyStatus.PENDING_INVITE,
+                isTrustedForSos = false,
+                canViewLiveLocation = false,
+                lastCheckIn = "Invitation pending SMS verification",
+                inviteCode = "SG-TN-4819"
             )
         )
 
@@ -337,5 +391,116 @@ object SafeguardRepository {
             timestamp = System.currentTimeMillis()
         )
         _auditLogs.value = listOf(entry) + _auditLogs.value
+    }
+
+    // Buddy System Operations
+    fun inviteBuddy(name: String, phone: String, relation: BuddyRelation): BuddyMember {
+        val inviteCode = "SG-TN-${(1000..9999).random()}"
+        val newBuddy = BuddyMember(
+            id = "bud-${UUID.randomUUID().toString().take(6)}",
+            name = name,
+            phone = phone,
+            relation = relation,
+            status = BuddyStatus.PENDING_INVITE,
+            isTrustedForSos = true,
+            canViewLiveLocation = true,
+            lastCheckIn = "Invite created • Code $inviteCode",
+            inviteCode = inviteCode
+        )
+        _buddies.value = _buddies.value + newBuddy
+        logAudit("BUDDY_INVITED", _currentUser.value.name, newBuddy.id, "Invited $name ($relation) with code $inviteCode")
+        return newBuddy
+    }
+
+    fun acceptIncomingInvite(inviteCode: String): Boolean {
+        val cleanCode = inviteCode.trim().uppercase()
+        val existing = _buddies.value.find { it.inviteCode?.uppercase() == cleanCode }
+
+        return if (existing != null) {
+            _buddies.value = _buddies.value.map {
+                if (it.id == existing.id) {
+                    it.copy(
+                        status = BuddyStatus.ACTIVE,
+                        acceptedAt = System.currentTimeMillis(),
+                        lastCheckIn = "Accepted invite • Active in network"
+                    )
+                } else it
+            }
+            logAudit("BUDDY_ACCEPTED", _currentUser.value.name, existing.id, "Accepted buddy code $cleanCode")
+            true
+        } else {
+            // Create buddy from code
+            val peerBuddy = BuddyMember(
+                id = "bud-peer-${UUID.randomUUID().toString().take(5)}",
+                name = "Kumbakonam Safety Buddy ($cleanCode)",
+                phone = "+91 944${(100000..999999).random()}",
+                relation = BuddyRelation.FRIEND,
+                status = BuddyStatus.ACTIVE,
+                isTrustedForSos = true,
+                canViewLiveLocation = true,
+                lastCheckIn = "Just joined via code $cleanCode",
+                inviteCode = cleanCode
+            )
+            _buddies.value = _buddies.value + peerBuddy
+            logAudit("BUDDY_PEER_JOINED", _currentUser.value.name, peerBuddy.id, "Linked buddy via invite code $cleanCode")
+            true
+        }
+    }
+
+    fun removeBuddy(buddyId: String) {
+        val buddy = _buddies.value.find { it.id == buddyId }
+        _buddies.value = _buddies.value.filterNot { it.id == buddyId }
+        logAudit("BUDDY_REMOVED", _currentUser.value.name, buddyId, "Removed buddy ${buddy?.name}")
+    }
+
+    fun toggleBuddySosPrivilege(buddyId: String) {
+        _buddies.value = _buddies.value.map {
+            if (it.id == buddyId) it.copy(isTrustedForSos = !it.isTrustedForSos) else it
+        }
+    }
+
+    fun toggleBuddyLiveLocation(buddyId: String) {
+        _buddies.value = _buddies.value.map {
+            if (it.id == buddyId) it.copy(canViewLiveLocation = !it.canViewLiveLocation) else it
+        }
+    }
+
+    fun simulateIncomingBuddySos(
+        name: String = "Priya Venkatesh (College Buddy)",
+        phone: String = "+91 98842 55667",
+        landmark: String = "Mahamaham Tank North Bank, Kumbakonam",
+        emergencyType: String = "Harassment / Unsafe transit path"
+    ) {
+        val alert = BuddySosAlert(
+            incidentId = "SG-BUD-${(1000..9999).random()}",
+            victimName = name,
+            victimPhone = phone,
+            location = LocationPoint(10.9595, 79.3802, landmark, "Thanjavur", "Tamil Nadu"),
+            timestamp = System.currentTimeMillis(),
+            emergencyType = emergencyType,
+            batteryPercent = 68,
+            isAcknowledged = false,
+            acknowledgedByMe = false
+        )
+        _incomingBuddySosAlert.value = alert
+        logAudit("BUDDY_SOS_RECEIVED", name, alert.incidentId, "Received high-priority Buddy SOS from $name at $landmark")
+    }
+
+    fun acknowledgeBuddyAlert(incidentId: String, responseType: String, notes: String? = null) {
+        val current = _incomingBuddySosAlert.value
+        if (current != null && current.incidentId == incidentId) {
+            _incomingBuddySosAlert.value = current.copy(
+                isAcknowledged = true,
+                acknowledgedByMe = true,
+                responseType = responseType,
+                responderNotes = notes,
+                activeSirenAlert = false
+            )
+            logAudit("BUDDY_SOS_ACK", _currentUser.value.name, incidentId, "Acknowledged SOS as '$responseType' (Notes: $notes)")
+        }
+    }
+
+    fun dismissBuddySosAlert() {
+        _incomingBuddySosAlert.value = null
     }
 }

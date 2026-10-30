@@ -32,6 +32,12 @@ enum class NetworkTab {
     AUDIT_LOGS
 }
 
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
 data class SafeguardUiState(
     val currentPortal: AppPortal = AppPortal.PEOPLE,
     val selectedPeopleTab: PeopleTab = PeopleTab.SOS,
@@ -44,8 +50,11 @@ data class SafeguardUiState(
     val sosCountdownSeconds: Int = 3,
     val isStrobeActive: Boolean = false,
     val isSirenPlaying: Boolean = false,
+    val isForegroundServiceRunning: Boolean = false,
     val showPortalSwitchDialog: Boolean = false,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val isEntranceVisible: Boolean = true
 )
 
 class SafeguardViewModel(application: Application) : AndroidViewModel(application) {
@@ -68,6 +77,8 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
     val emergencyContacts = SafeguardRepository.emergencyContacts
     val activeLiveShares = SafeguardRepository.activeLiveShares
     val auditLogs = SafeguardRepository.auditLogs
+    val buddies = SafeguardRepository.buddies
+    val incomingBuddySosAlert = SafeguardRepository.incomingBuddySosAlert
 
     private var countdownJob: Job? = null
     private var sosProgressionJob: Job? = null
@@ -77,6 +88,21 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             locationManager.currentLocation.collect { loc ->
                 _uiState.update { it.copy(currentLocation = loc, isGpsActive = true) }
+            }
+        }
+
+        // Collect location from real Foreground Service if running
+        viewModelScope.launch {
+            com.example.service.SafeguardLocationService.serviceLocation.collect { loc ->
+                if (loc != null) {
+                    _uiState.update { it.copy(currentLocation = loc, isGpsActive = true) }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            com.example.service.SafeguardLocationService.isServiceRunning.collect { running ->
+                _uiState.update { it.copy(isForegroundServiceRunning = running) }
             }
         }
 
@@ -181,6 +207,14 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
             location = _uiState.value.currentLocation
         )
         EmergencyActions.triggerHapticPulse(getApplication())
+
+        // Start Foreground Service with SOS priority if location permission granted
+        if (_uiState.value.hasLocationPermission) {
+            com.example.service.SafeguardLocationService.start(
+                getApplication(),
+                com.example.service.SafeguardLocationService.MODE_SOS
+            )
+        }
 
         // Truthful backend status lifecycle simulation
         sosProgressionJob?.cancel()
@@ -312,5 +346,91 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clearStatusMessage() {
         _uiState.update { it.copy(statusMessage = null) }
+    }
+
+    // Foreground Location Service Controls
+    fun startForegroundLocationService(mode: String = com.example.service.SafeguardLocationService.MODE_GUARDIAN) {
+        if (!_uiState.value.hasLocationPermission) {
+            _uiState.update { it.copy(statusMessage = "Grant location permission first to start background service") }
+            return
+        }
+        com.example.service.SafeguardLocationService.start(getApplication(), mode)
+        _uiState.update { it.copy(statusMessage = "SAFEGUARD Background GPS Service running with persistent notification") }
+    }
+
+    fun stopForegroundLocationService() {
+        com.example.service.SafeguardLocationService.stop(getApplication())
+        _uiState.update { it.copy(statusMessage = "Background GPS Service stopped") }
+    }
+
+    // Buddy System Management
+    fun inviteBuddy(name: String, phone: String, relation: BuddyRelation) {
+        val buddy = SafeguardRepository.inviteBuddy(name, phone, relation)
+        _uiState.update { it.copy(statusMessage = "Buddy invitation created! Code: ${buddy.inviteCode}") }
+    }
+
+    fun acceptBuddyInvite(code: String) {
+        val success = SafeguardRepository.acceptIncomingInvite(code)
+        if (success) {
+            _uiState.update { it.copy(statusMessage = "Buddy invitation accepted! Connected to safety network.") }
+        } else {
+            _uiState.update { it.copy(statusMessage = "Invalid or expired buddy invitation code") }
+        }
+    }
+
+    fun removeBuddy(buddyId: String) {
+        SafeguardRepository.removeBuddy(buddyId)
+        _uiState.update { it.copy(statusMessage = "Buddy removed from trusted group") }
+    }
+
+    fun toggleBuddySosPrivilege(buddyId: String) {
+        SafeguardRepository.toggleBuddySosPrivilege(buddyId)
+    }
+
+    fun toggleBuddyLiveLocation(buddyId: String) {
+        SafeguardRepository.toggleBuddyLiveLocation(buddyId)
+    }
+
+    fun simulateIncomingBuddySos() {
+        SafeguardRepository.simulateIncomingBuddySos()
+        _uiState.update { it.copy(statusMessage = "Simulated incoming Buddy SOS alert received!") }
+    }
+
+    fun acknowledgeBuddyAlert(incidentId: String, responseType: String, notes: String? = null) {
+        SafeguardRepository.acknowledgeBuddyAlert(incidentId, responseType, notes)
+        _uiState.update { it.copy(statusMessage = "Response recorded: $responseType dispatched to Buddy") }
+    }
+
+    fun dismissBuddySosAlert() {
+        SafeguardRepository.dismissBuddySosAlert()
+    }
+
+    // Theme Mode & Entrance Management
+    fun toggleThemeMode() {
+        _uiState.update { current ->
+            val next = when (current.themeMode) {
+                ThemeMode.SYSTEM -> ThemeMode.DARK
+                ThemeMode.DARK -> ThemeMode.LIGHT
+                ThemeMode.LIGHT -> ThemeMode.SYSTEM
+            }
+            val label = when (next) {
+                ThemeMode.SYSTEM -> "Theme: System Default"
+                ThemeMode.DARK -> "Theme: High-Contrast Dark Mode"
+                ThemeMode.LIGHT -> "Theme: High-Contrast Light Mode"
+            }
+            current.copy(themeMode = next, statusMessage = label)
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        _uiState.update { it.copy(themeMode = mode) }
+    }
+
+    fun dismissEntrance() {
+        _uiState.update { it.copy(isEntranceVisible = false) }
+    }
+
+    fun showEntrance() {
+        _uiState.update { it.copy(isEntranceVisible = true) }
     }
 }

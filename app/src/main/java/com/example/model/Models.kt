@@ -141,3 +141,48 @@ data class LiveShareSession(
     val isActive: Boolean = true,
     val currentPoint: LocationPoint
 )
+
+enum class BuddyRelation(val label: String) {
+    PARENT("Parent / Guardian"),
+    SIBLING("Sibling / Family"),
+    CLASSMATE("Classmate / Student"),
+    TEACHER("Teacher / Faculty"),
+    FRIEND("Trusted Friend"),
+    COMMUNITY_WATCH("Community Volunteer")
+}
+
+enum class BuddyStatus(val label: String) {
+    ACTIVE("Active Guardian"),
+    PENDING_INVITE("Invite Sent"),
+    INVITATION_RECEIVED("Incoming Request")
+}
+
+data class BuddyMember(
+    val id: String = UUID.randomUUID().toString().take(8),
+    val name: String,
+    val phone: String,
+    val relation: BuddyRelation,
+    val status: BuddyStatus = BuddyStatus.ACTIVE,
+    val isTrustedForSos: Boolean = true,
+    val canViewLiveLocation: Boolean = true,
+    val invitedAt: Long = System.currentTimeMillis() - 86400000L * 2,
+    val acceptedAt: Long? = System.currentTimeMillis() - 86400000L,
+    val lastCheckIn: String = "15m ago • Near Kumbakonam Railway Road",
+    val inviteCode: String? = null
+)
+
+data class BuddySosAlert(
+    val incidentId: String,
+    val victimName: String,
+    val victimPhone: String,
+    val location: LocationPoint,
+    val timestamp: Long = System.currentTimeMillis(),
+    val emergencyType: String = "Physical Threat / Distress SOS",
+    val batteryPercent: Int = 82,
+    val isAcknowledged: Boolean = false,
+    val acknowledgedByMe: Boolean = false,
+    val responseType: String? = null, // "ON_MY_WAY", "CALLED_POLICE_112", "REACHED_VICTIM"
+    val responderNotes: String? = null,
+    val activeSirenAlert: Boolean = true
+)
+
