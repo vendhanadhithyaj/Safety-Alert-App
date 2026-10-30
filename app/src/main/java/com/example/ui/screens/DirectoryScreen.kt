@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,11 +16,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.model.EmergencyContact
 import com.example.ui.SafeguardViewModel
 import com.example.ui.theme.*
@@ -30,6 +35,7 @@ fun DirectoryScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
     val contacts by viewModel.emergencyContacts.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
@@ -48,55 +54,94 @@ fun DirectoryScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(SlateLight)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header
+        // Header Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(0.dp, 0.dp, 16.dp, 16.dp),
             colors = CardDefaults.cardColors(containerColor = SafeguardNavy)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(10.dp),
+                        shadowElevation = 3.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.5f)),
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.safeguard_official_logo),
+                            contentDescription = "SAFEGUARD Emblem",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().padding(3.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "AUTHORITATIVE DIRECTORY",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SafetyTeal,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Tamil Nadu Emergency & Police Contacts",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
                 Text(
-                    text = "AUTHORITATIVE DIRECTORY",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SafetyTeal,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "Tamil Nadu Emergency & Police Contacts",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "All helplines verified with official government sources. One-tap direct call.",
-                    fontSize = 11.sp,
+                    text = "Verified 24/7 helplines with direct 1-tap dialer connection.",
+                    fontSize = 12.sp,
                     color = Color(0xFFCBD5E1),
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 8.dp)
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Search field
+                // High-Contrast Search Field
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search police, ambulance, women helpline...", fontSize = 12.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SlateTextMuted) },
+                    placeholder = {
+                        Text(
+                            "Search police, ambulance, women helpline...",
+                            fontSize = 12.sp,
+                            color = if (isDark) DarkTextSecondary else SlateTextMuted
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SafetyTeal) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
+                        focusedContainerColor = if (isDark) DarkSurface else Color.White,
+                        unfocusedContainerColor = if (isDark) DarkSurface else Color.White,
+                        focusedTextColor = if (isDark) DarkTextPrimary else SlateTextDark,
+                        unfocusedTextColor = if (isDark) DarkTextPrimary else SlateTextDark,
+                        focusedBorderColor = SafetyTeal,
+                        unfocusedBorderColor = if (isDark) DarkBorder else SlateBorder
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
 
-        // Category Filter Tabs
+        // Category Filter Chips
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -107,7 +152,13 @@ fun DirectoryScreen(
                 FilterChip(
                     selected = selectedCategory == cat,
                     onClick = { selectedCategory = cat },
-                    label = { Text(cat, fontSize = 11.sp) }
+                    label = {
+                        Text(
+                            cat,
+                            fontSize = 11.sp,
+                            fontWeight = if (selectedCategory == cat) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
                 )
             }
         }
@@ -123,6 +174,7 @@ fun DirectoryScreen(
             items(filteredContacts) { contact ->
                 EmergencyContactCard(
                     contact = contact,
+                    isDark = isDark,
                     onCall = { EmergencyActions.dialEmergency(context, contact.number) }
                 )
             }
@@ -137,14 +189,17 @@ fun DirectoryScreen(
 @Composable
 private fun EmergencyContactCard(
     contact: EmergencyContact,
+    isDark: Boolean,
     onCall: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, SlateBorder, RoundedCornerShape(14.dp)),
+            .border(1.dp, if (isDark) DarkBorder else SlateBorder, RoundedCornerShape(14.dp)),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) DarkSurface else Color.White
+        )
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -152,15 +207,14 @@ private fun EmergencyContactCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         when (contact.number) {
-                            "112" -> EmergencyRedLight
-                            "1091", "181" -> SafetyTealLight
-                            "1098" -> PrimaryBlue.copy(alpha = 0.15f)
-                            "108" -> EmergencyRedLight
-                            else -> SlateLight
+                            "112" -> if (isDark) Color(0xFF5C101B) else EmergencyRedLight
+                            "1091", "181" -> if (isDark) Color(0xFF1E3A5F) else SafetyTealLight
+                            "108" -> if (isDark) Color(0xFF5C101B) else EmergencyRedLight
+                            else -> if (isDark) DarkSurfaceVariant else Color(0xFFE2E8F0)
                         }
                     ),
                 contentAlignment = Alignment.Center
@@ -175,49 +229,49 @@ private fun EmergencyContactCard(
                     },
                     contentDescription = null,
                     tint = when (contact.number) {
-                        "112" -> EmergencyRed
-                        "1091", "181" -> SafetyTealDark
-                        "1098" -> PrimaryBlue
-                        "108" -> EmergencyRed
-                        else -> SafeguardNavy
+                        "112" -> EmergencyRedBright
+                        "1091", "181" -> SafetyTeal
+                        "108" -> EmergencyRedBright
+                        else -> if (isDark) SafetyTeal else SafeguardNavy
                     },
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = contact.name,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SafeguardNavy
-                    )
-                }
+                Text(
+                    text = contact.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) DarkTextPrimary else SafeguardNavy
+                )
                 Text(
                     text = contact.description,
-                    fontSize = 11.sp,
-                    color = SlateTextMuted,
-                    lineHeight = 13.sp
+                    fontSize = 12.sp,
+                    color = if (isDark) DarkTextSecondary else SlateTextSecondary,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Number: ${contact.number}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryBlue
+                        text = "Dial: ${contact.number}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (contact.number == "112") EmergencyRedBright else SafetyTeal
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Surface(shape = RoundedCornerShape(4.dp), color = SafeGreenLight) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isDark) Color(0xFF064E3B) else SafeGreenLight
+                    ) {
                         Text(
                             text = contact.verifiedDate,
-                            fontSize = 9.sp,
-                            color = SafeGreenDark,
+                            fontSize = 10.sp,
+                            color = if (isDark) SafeGreenLight else SafeGreenDark,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -227,14 +281,17 @@ private fun EmergencyContactCard(
                 onClick = onCall,
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (contact.number == "112") EmergencyRed else SafetyTealDark
+                    containerColor = if (contact.number == "112") EmergencyRed else SafetyTealDark,
+                    contentColor = Color.White
                 ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.height(36.dp).testTag("button_call_${contact.number}")
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier
+                    .height(38.dp)
+                    .testTag("button_call_${contact.number}")
             ) {
-                Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Call", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Call", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

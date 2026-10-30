@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -98,6 +99,7 @@ fun LocationPermissionCard(
     description: String = "Grant ACCESS_FINE_LOCATION for sub-10m responder dispatch, live buddy tracking, and verified danger zones in Tamil Nadu."
 ) {
     val context = LocalContext.current
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
 
     AnimatedVisibility(
         visible = !hasPermission,
@@ -110,8 +112,10 @@ fun LocationPermissionCard(
                 .padding(horizontal = 12.dp, vertical = 6.dp)
                 .testTag("location_permission_card"),
             shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = WarningAmberLight),
-            border = androidx.compose.foundation.BorderStroke(1.dp, WarningAmber)
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) DarkSurfaceVariant else WarningAmberLight
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, WarningAmber)
         ) {
             Row(
                 modifier = Modifier.padding(14.dp),
@@ -119,16 +123,16 @@ fun LocationPermissionCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(42.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(WarningAmber.copy(alpha = 0.2f)),
+                        .background(if (isDark) WarningAmber.copy(alpha = 0.25f) else WarningAmber.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.LocationOff,
                         contentDescription = "Location Disabled",
-                        tint = WarningAmber,
-                        modifier = Modifier.size(22.dp)
+                        tint = if (isDark) WarningAmber else Color(0xFFB45309),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
@@ -139,20 +143,24 @@ fun LocationPermissionCard(
                         text = title,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SafeguardNavy
+                        color = if (isDark) DarkTextPrimary else SafeguardNavy
                     )
                     Text(
                         text = description,
                         fontSize = 11.sp,
-                        color = SlateTextDark,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isDark) DarkTextSecondary else SlateTextDark,
                         lineHeight = 15.sp,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
+                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = onRequestPermission,
-                            colors = ButtonDefaults.buttonColors(containerColor = SafeguardNavy),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isDark) SafetyTeal else SafeguardNavy,
+                                contentColor = if (isDark) SafeguardNavyDark else Color.White
+                            ),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier
@@ -172,10 +180,19 @@ fun LocationPermissionCard(
                                 context.startActivity(intent)
                             },
                             shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isDark) DarkBorder else SlateBorder
+                            ),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                             modifier = Modifier.height(36.dp)
                         ) {
-                            Text("App Settings", fontSize = 11.sp, color = SafeguardNavy)
+                            Text(
+                                "App Settings",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isDark) SafetyTeal else SafeguardNavy
+                            )
                         }
                     }
                 }
@@ -192,13 +209,15 @@ fun LocationPermissionDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
                 Icons.Default.GpsFixed,
                 contentDescription = null,
-                tint = SafetyTealDark,
+                tint = SafetyTeal,
                 modifier = Modifier.size(36.dp)
             )
         },
@@ -207,29 +226,29 @@ fun LocationPermissionDialog(
                 "Enable Exact Geolocation",
                 fontWeight = FontWeight.Bold,
                 fontSize = 17.sp,
-                color = SafeguardNavy
+                color = if (isDark) DarkTextPrimary else SafeguardNavy
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "SAFEGUARD protects students, women, and citizens across Kumbakonam and Tamil Nadu.",
-                    fontSize = 12.sp,
-                    color = SlateTextDark
+                    fontSize = 13.sp,
+                    color = if (isDark) DarkTextPrimary else SlateTextDark
                 )
                 Text(
                     "• Emergency SOS: Sub-10m precision dispatched to Police 112 & Fire Responders.\n" +
                     "• Buddy System: Real-time breadcrumb sharing with trusted family & friends.\n" +
                     "• Danger Zones: Real-time proximity warnings when approaching unlit or flooded corridors.",
-                    fontSize = 11.sp,
-                    color = SlateTextMuted,
+                    fontSize = 12.sp,
+                    color = if (isDark) DarkTextSecondary else SlateTextSecondary,
                     lineHeight = 16.sp
                 )
                 Text(
                     "Select 'While using the app' and 'Precise' on the following prompt.",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = SafetyTealDark
+                    color = SafetyTeal
                 )
             }
         },
@@ -244,7 +263,7 @@ fun LocationPermissionDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = SlateTextMuted)
+                Text("Cancel", color = if (isDark) DarkTextSecondary else SlateTextMuted)
             }
         }
     )

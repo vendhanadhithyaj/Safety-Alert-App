@@ -23,10 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.example.R
 import com.example.model.CommunityReport
 import com.example.model.ReportCategory
 import com.example.model.ReviewStatus
@@ -55,6 +57,14 @@ fun ReportScreen(
     var customLocation by remember { mutableStateOf<com.example.model.LocationPoint?>(null) }
     var showMapPickerModal by remember { mutableStateOf(false) }
 
+    LaunchedEffect(uiState.pendingReportLocation) {
+        uiState.pendingReportLocation?.let { loc ->
+            customLocation = loc
+            showForm = true
+            viewModel.clearPendingReportLocation()
+        }
+    }
+
     val effectiveLocation = customLocation ?: uiState.currentLocation
 
     // Android zero-permission Photo Picker
@@ -81,21 +91,43 @@ fun ReportScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Text(
-                            text = "COMMUNITY SAFETY REPORTS",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SafetyTeal,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "Report Street & Civic Hazards",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = Color.White,
+                            shape = RoundedCornerShape(8.dp),
+                            shadowElevation = 2.dp,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.safeguard_official_logo),
+                                contentDescription = "SAFEGUARD Emblem",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize().padding(2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "COMMUNITY SAFETY REPORTS",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafetyTeal,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Report Street & Civic Hazards",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
                         onClick = { showForm = !showForm },

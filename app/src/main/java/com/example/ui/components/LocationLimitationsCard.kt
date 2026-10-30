@@ -1,9 +1,9 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,16 +24,19 @@ fun LocationLimitationsCard(
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, SlateBorder, RoundedCornerShape(12.dp))
+            .border(1.dp, if (isDark) DarkBorder else SlateBorder, RoundedCornerShape(12.dp))
             .clickable { isExpanded = !isExpanded },
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) DarkSurface else Color.White
+        )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -46,28 +49,29 @@ fun LocationLimitationsCard(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
-                        tint = SafetyTealDark,
-                        modifier = Modifier.size(20.dp)
+                        tint = SafetyTeal,
+                        modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Browser & OS Location Limitations",
-                            fontSize = 12.sp,
+                            text = "Browser & OS Location Disclosures",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeguardNavy
+                            color = if (isDark) DarkTextPrimary else SafeguardNavy
                         )
                         Text(
-                            text = "Background tracking rules & GPS accuracy disclosure",
-                            fontSize = 10.sp,
-                            color = SlateTextMuted
+                            text = "Android Doze limits & GPS accuracy requirements",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isDark) DarkTextSecondary else SlateTextSecondary
                         )
                     }
                 }
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = SlateTextMuted
+                    tint = if (isDark) SafetyTeal else SlateTextSecondary
                 )
             }
 
@@ -77,28 +81,33 @@ fun LocationLimitationsCard(
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                 ) {
-                    HorizontalDivider(color = SlateBorder.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = if (isDark) DarkBorder else SlateBorder)
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     LimitationItem(
                         title = "1. Android OS Background Location Throttling",
-                        desc = "From Android 8.0 (Oreo) and Android 10+, Google limits background location polling to a few times per hour to preserve battery. For real-time updates, keep SAFEGUARD active or foreground-notified."
+                        desc = "From Android 8.0 and Android 10+, background GPS polling is throttled to save battery. For uninterrupted turn-by-turn emergency tracking, keep SAFEGUARD open or Foreground Service enabled.",
+                        isDark = isDark
                     )
                     LimitationItem(
                         title = "2. Device Doze Mode & Deep Sleep",
-                        desc = "When the screen is off and stationary, Android enters Doze Mode, suspending network and sensor operations until an explicit maintenance window or high-priority emergency alert arrives."
+                        desc = "When the phone is stationary, Android suspends non-essential background tasks until user movement or high-priority 112 emergency alerts wake the system.",
+                        isDark = isDark
                     )
                     LimitationItem(
-                        title = "3. Mobile Browser Geolocation Restrictions",
-                        desc = "Web and browser versions restrict geolocation to active tabs and strictly forbid background tracking once minimized. Geolocation requires explicit per-session permission and secure HTTPS."
+                        title = "3. Web & Browser Geolocation Restrictions",
+                        desc = "Browser webviews require user consent per session and require secure HTTPS. Background geolocation in mobile browsers is terminated once tabs are minimized.",
+                        isDark = isDark
                     )
                     LimitationItem(
-                        title = "4. GPS Satellite vs Indoors Accuracy",
-                        desc = "Hardware GPS satellites provide ±3m to ±10m precision outdoors. Indoors, mobile devices fall back to Wi-Fi SSID and cellular triangulation with a wider ±50m to ±200m margin."
+                        title = "4. GPS Satellite vs Indoor Accuracy",
+                        desc = "Hardware GPS satellites provide ±3m to ±8m accuracy in open areas. Indoors or in basements, devices rely on cellular/Wi-Fi triangulation with a ±40m to ±150m margin.",
+                        isDark = isDark
                     )
                     LimitationItem(
-                        title = "5. Permission Transparency",
-                        desc = "SAFEGUARD requests fine and coarse location solely for active emergency response, danger zone alerts, and consensual temporary sharing sessions."
+                        title = "5. Emergency Transparency Guarantee",
+                        desc = "Location data is processed exclusively for emergency SOS alerts, danger zone proximity warnings, and consent-based temporary sharing.",
+                        isDark = isDark
                     )
                 }
             }
@@ -107,19 +116,20 @@ fun LocationLimitationsCard(
 }
 
 @Composable
-private fun LimitationItem(title: String, desc: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+private fun LimitationItem(title: String, desc: String, isDark: Boolean) {
+    Column(modifier = Modifier.padding(vertical = 5.dp)) {
         Text(
             text = title,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = SafeguardNavy
+            color = if (isDark) SafetyTeal else PrimaryBlue
         )
         Text(
             text = desc,
-            fontSize = 10.sp,
-            color = SlateTextDark,
-            lineHeight = 13.sp
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Normal,
+            color = if (isDark) DarkTextSecondary else SlateTextDark,
+            lineHeight = 15.sp
         )
     }
 }

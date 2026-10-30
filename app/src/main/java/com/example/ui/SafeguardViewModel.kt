@@ -54,7 +54,8 @@ data class SafeguardUiState(
     val showPortalSwitchDialog: Boolean = false,
     val statusMessage: String? = null,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val isEntranceVisible: Boolean = true
+    val isEntranceVisible: Boolean = true,
+    val pendingReportLocation: LocationPoint? = null
 )
 
 class SafeguardViewModel(application: Application) : AndroidViewModel(application) {
@@ -73,6 +74,7 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
     val allIncidents = SafeguardRepository.incidents
     val communityReports = SafeguardRepository.reports
     val dangerZones = SafeguardRepository.dangerZones
+    val safeStations = SafeguardRepository.safeStations
     val circleMessages = SafeguardRepository.circleMessages
     val emergencyContacts = SafeguardRepository.emergencyContacts
     val activeLiveShares = SafeguardRepository.activeLiveShares
@@ -169,6 +171,20 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(selectedPeopleTab = tab) }
     }
 
+    fun initiateReportAtLocation(location: LocationPoint) {
+        _uiState.update {
+            it.copy(
+                pendingReportLocation = location,
+                selectedPeopleTab = PeopleTab.REPORT,
+                statusMessage = "Location selected for hazard report: ${location.landmark}"
+            )
+        }
+    }
+
+    fun clearPendingReportLocation() {
+        _uiState.update { it.copy(pendingReportLocation = null) }
+    }
+
     fun setNetworkTab(tab: NetworkTab) {
         _uiState.update { it.copy(selectedNetworkTab = tab) }
     }
@@ -254,6 +270,9 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isSirenPlaying = next) }
         if (next) {
             EmergencyActions.triggerHapticPulse(getApplication())
+            com.example.util.EmergencySirenPlayer.start(getApplication())
+        } else {
+            com.example.util.EmergencySirenPlayer.stop()
         }
     }
 
@@ -432,5 +451,10 @@ class SafeguardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun showEntrance() {
         _uiState.update { it.copy(isEntranceVisible = true) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        com.example.util.EmergencySirenPlayer.stop()
     }
 }

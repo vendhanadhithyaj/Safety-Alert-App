@@ -3,14 +3,16 @@ package com.example.ui.components
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,10 +32,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.model.DangerZone
 import com.example.model.LocationPoint
+import com.example.model.SafeStation
+import com.example.model.SafeStationType
 import com.example.model.SosIncident
 import com.example.ui.theme.*
 import com.example.util.EmergencyActions
-import com.example.util.LocationHelper
 
 enum class MapTileType {
     STREET,
@@ -47,19 +50,29 @@ fun GoogleMapsPlatformView(
     userLocation: LocationPoint,
     dangerZones: List<DangerZone>,
     activeIncidents: List<SosIncident>,
+    safeStations: List<SafeStation> = emptyList(),
     selectedPoint: LocationPoint? = null,
+    searchedLocation: LocationPoint? = null,
     isSelectionMode: Boolean = false,
+    isDarkTheme: Boolean = false,
     onLocationPicked: ((Double, Double) -> Unit)? = null,
     onZoneSelected: ((DangerZone) -> Unit)? = null,
+    onStationSelected: ((SafeStation) -> Unit)? = null,
+    onReportAtLocation: ((Double, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var hasError by remember { mutableStateOf(false) }
+    var isPageLoaded by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var currentTileType by remember { mutableStateOf(MapTileType.STREET) }
+    var webViewKey by remember { mutableStateOf(0) } // For clean recreation on error/retry
 
-    // Generate JSON for markers and danger zones to inject into JS
+    var currentTileType by remember(isDarkTheme) {
+        mutableStateOf(if (isDarkTheme) MapTileType.DARK else MapTileType.STREET)
+    }
+
+    // Generate JSON for markers and danger zones
     val zonesJson = remember(dangerZones) {
         val items = dangerZones.filter { it.isActive }.map { z ->
             """{
@@ -91,15 +104,95 @@ fun GoogleMapsPlatformView(
         "[${items.joinToString(",")}]"
     }
 
-    val htmlContent = remember(userLocation, zonesJson, incidentsJson, isSelectionMode, currentTileType) {
+    val safeStationsJson = remember(safeStations) {
+        val items = safeStations.map { stn ->
+            """{
+                "id": "${stn.id}",
+                "name": "${stn.name.replace("\"", "\\\"")}",
+                "type": "${stn.type.name}",
+                "typeLabel": "${stn.type.label.replace("\"", "\\\"")}",
+                "lat": ${stn.location.latitude},
+                "lng": ${stn.location.longitude},
+                "phone": "${stn.phone}",
+                "landmark": "${stn.location.landmark.replace("\"", "\\\"")}"
+            }"""
+        }
+        "[${items.joinToString(",")}]"
+    }
+
+    // Full HTML template generated only for page loads (tile switch / initial)
+    val htmlContent = remember(currentTileType, isDarkTheme) {
         buildMapHtml(
-            userLat = userLocation.latitude,
-            userLng = userLocation.longitude,
+            initialLat = userLocation.latitude,
+            initialLng = userLocation.longitude,
             zonesJson = zonesJson,
             incidentsJson = incidentsJson,
-            isSelectionMode = isSelectionMode,
-            tileType = currentTileType
+            safeStationsJson = safeStationsJson,
+            tileType = currentTileType,
+            isDarkTheme = isDarkTheme
         )
+    }
+
+    // Update GPS position in running Leaflet without reloading page
+    LaunchedEffect(userLocation.latitude, userLocation.longitude, isPageLoaded) {
+        if (isPageLoaded && webViewRef != null) {
+            webViewRef?.evaluateJavascript(
+                "updateUserPosition(${userLocation.latitude}, ${userLocation.longitude});",
+                null
+            )
+        }
+    }
+
+    // Update map layer markers dynamically without reloading page
+    LaunchedEffect(zonesJson, incidentsJson, safeStationsJson, isPageLoaded) {
+        if (isPageLoaded && webViewRef != null) {
+            webViewRef?.evaluateJavascript(
+                "updateLayers($zonesJson, $incidentsJson, $safeStationsJson);",
+                null
+            )
+        }
+    }
+
+    // Trigger search animation whenever searchedLocation updates
+    LaunchedEffect(searchedLocation, isPageLoaded) {
+        if (isPageLoaded && searchedLocation != null) {
+            val safeLabel = searchedLocation.landmark.replace("'", "\\'").replace("\"", "\\\"")
+            webViewRef?.evaluateJavascript(
+                "searchLocation(${searchedLocation.latitude}, ${searchedLocation.longitude}, '$safeLabel');",
+                null
+            )
+        }
+    }
+
+    // Update selected point if provided
+    LaunchedEffect(selectedPoint, isPageLoaded) {
+        if (isPageLoaded && selectedPoint != null) {
+            val safeLabel = selectedPoint.landmark.replace("'", "\\'").replace("\"", "\\\"")
+            webViewRef?.evaluateJavascript(
+                "dropSelectedPin(${selectedPoint.latitude}, ${selectedPoint.longitude}, '$safeLabel');",
+                null
+            )
+        }
+    }
+
+    // Reload page if tile type changes
+    LaunchedEffect(currentTileType) {
+        if (webViewRef != null) {
+            isLoading = true
+            webViewRef?.loadDataWithBaseURL("https://maps.google.com/", htmlContent, "text/html", "UTF-8", null)
+        }
+    }
+
+    // Clean up WebView when leaving screen
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                webViewRef?.stopLoading()
+                webViewRef?.removeJavascriptInterface("AndroidBridge")
+                webViewRef?.destroy()
+                webViewRef = null
+            } catch (_: Exception) {}
+        }
     }
 
     // JS interface for Android callbacks
@@ -118,9 +211,22 @@ fun GoogleMapsPlatformView(
         }
 
         @JavascriptInterface
+        fun onStationClicked(stationId: String) {
+            val station = safeStations.firstOrNull { it.id == stationId }
+            if (station != null) {
+                onStationSelected?.invoke(station)
+            }
+        }
+
+        @JavascriptInterface
         fun onRouteRequested(lat: Double, lng: Double, landmark: String) {
             val destination = LocationPoint(lat, lng, landmark)
             EmergencyActions.openRouteInGoogleMaps(context, userLocation, destination)
+        }
+
+        @JavascriptInterface
+        fun onReportRequested(lat: Double, lng: Double) {
+            onReportAtLocation?.invoke(lat, lng)
         }
     }
 
@@ -128,87 +234,108 @@ fun GoogleMapsPlatformView(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFE2E8F0))
+            .background(if (isDarkTheme) DarkSurface else Color(0xFFE2E8F0))
             .testTag("google_maps_platform_container")
     ) {
-        // Embedded Interactive Map View
-        AndroidView(
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    settings.setSupportZoom(true)
-                    settings.builtInZoomControls = false
+        key(webViewKey) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        // CRITICAL: Software layer prevents Chromium GPU/renderer crash in virtualization/containers
+                        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
 
-                    addJavascriptInterface(WebAppInterface(), "AndroidBridge")
-
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                            isLoading = true
-                            hasError = false
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            setSupportZoom(true)
+                            builtInZoomControls = false
+                            displayZoomControls = false
                         }
 
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            isLoading = false
-                        }
+                        addJavascriptInterface(WebAppInterface(), "AndroidBridge")
 
-                        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                            if (request?.isForMainFrame == true) {
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                isLoading = true
+                                hasError = false
+                            }
+
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                isLoading = false
+                                isPageLoaded = true
+                            }
+
+                            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                                if (request?.isForMainFrame == true) {
+                                    hasError = true
+                                    isLoading = false
+                                }
+                            }
+
+                            // CRITICAL FIX: Handle renderer process termination safely so Android does NOT terminate host app
+                            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                                 hasError = true
                                 isLoading = false
+                                isPageLoaded = false
+                                try {
+                                    (view?.parent as? ViewGroup)?.removeView(view)
+                                    view?.destroy()
+                                } catch (_: Exception) {}
+                                webViewRef = null
+                                return true // Return true to indicate crash handled and app should NOT be killed
                             }
                         }
-                    }
 
-                    loadDataWithBaseURL("https://maps.google.com/", htmlContent, "text/html", "UTF-8", null)
-                    webViewRef = this
-                }
-            },
-            update = { webView ->
-                webViewRef = webView
-                webView.loadDataWithBaseURL("https://maps.google.com/", htmlContent, "text/html", "UTF-8", null)
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+                        loadDataWithBaseURL("https://maps.google.com/", htmlContent, "text/html", "UTF-8", null)
+                        webViewRef = this
+                    }
+                },
+                // Do NOT reload webview inside update lambda; use LaunchedEffect and JS calls instead!
+                update = { webView ->
+                    webViewRef = webView
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Loading State Overlay
         if (isLoading) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = Color.White.copy(alpha = 0.85f)
+                color = (if (isDarkTheme) DarkBackground else Color.White).copy(alpha = 0.88f)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = SafetyTealDark, strokeWidth = 3.dp)
+                    CircularProgressIndicator(color = SafetyTeal, strokeWidth = 3.dp)
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "Loading Google Maps Platform...",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SafeguardNavy
+                        color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy
                     )
                     Text(
-                        text = "Fetching live satellite and hazard layers",
-                        fontSize = 10.sp,
-                        color = SlateTextMuted
+                        text = "Fetching live satellite, hazard, and safe zone layers",
+                        fontSize = 11.sp,
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
                     )
                 }
             }
         }
 
-        // Failure State Overlay
+        // Failure State Overlay with One-Tap Safe Retry
         if (hasError) {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = Color.White,
+                color = if (isDarkTheme) DarkSurface else Color.White,
                 shadowElevation = 6.dp
             ) {
                 Column(
@@ -219,20 +346,20 @@ fun GoogleMapsPlatformView(
                     Icon(
                         imageVector = Icons.Default.SignalWifiOff,
                         contentDescription = "Map Error",
-                        tint = EmergencyRed,
+                        tint = EmergencyRedBright,
                         modifier = Modifier.size(36.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Unable to Load Google Maps",
+                        text = "Map Renderer Reload Required",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = SafeguardNavy
+                        color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy
                     )
                     Text(
-                        text = "Check your device internet connectivity or GPS signal.",
-                        fontSize = 11.sp,
-                        color = SlateTextMuted,
+                        text = "Tap below to restore the interactive map view.",
+                        fontSize = 12.sp,
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -240,19 +367,20 @@ fun GoogleMapsPlatformView(
                         onClick = {
                             hasError = false
                             isLoading = true
-                            webViewRef?.reload()
+                            isPageLoaded = false
+                            webViewKey++ // Cleanly recreate WebView
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = SafetyTealDark)
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Retry Connection", fontSize = 11.sp)
+                        Text("Restore Map", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // Top Map Controls (Layer Switcher & Selection Indicator)
+        // Top Map Controls (Layer Switcher & Status Badge)
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -262,11 +390,11 @@ fun GoogleMapsPlatformView(
         ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = SafeguardNavy.copy(alpha = 0.9f),
+                color = SafeguardNavy.copy(alpha = 0.92f),
                 shadowElevation = 4.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -277,7 +405,7 @@ fun GoogleMapsPlatformView(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isSelectionMode) "TAP TO PIN HAZARD" else "LIVE GPS ACTIVE",
+                        text = if (isSelectionMode) "TAP MAP TO PIN" else "LIVE GPS ACTIVE",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -285,19 +413,27 @@ fun GoogleMapsPlatformView(
                 }
             }
 
-            // Layer toggle (Street / Satellite)
+            // Layer toggle (Street / Satellite / Dark)
             SmallFloatingActionButton(
                 onClick = {
-                    currentTileType = if (currentTileType == MapTileType.STREET) MapTileType.SATELLITE else MapTileType.STREET
+                    currentTileType = when (currentTileType) {
+                        MapTileType.STREET -> MapTileType.SATELLITE
+                        MapTileType.SATELLITE -> if (isDarkTheme) MapTileType.DARK else MapTileType.STREET
+                        MapTileType.DARK -> MapTileType.STREET
+                    }
                 },
-                containerColor = Color.White,
-                contentColor = SafeguardNavy,
-                modifier = Modifier.size(34.dp)
+                containerColor = if (isDarkTheme) DarkSurface else Color.White,
+                contentColor = if (isDarkTheme) SafetyTeal else SafeguardNavy,
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = if (currentTileType == MapTileType.STREET) Icons.Default.Satellite else Icons.Default.Map,
+                    imageVector = when (currentTileType) {
+                        MapTileType.SATELLITE -> Icons.Default.Public
+                        MapTileType.DARK -> Icons.Default.DarkMode
+                        MapTileType.STREET -> Icons.Default.Map
+                    },
                     contentDescription = "Toggle Layer",
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -305,10 +441,13 @@ fun GoogleMapsPlatformView(
         // Recenter on GPS location button
         SmallFloatingActionButton(
             onClick = {
-                webViewRef?.loadUrl("javascript:recenter(${userLocation.latitude}, ${userLocation.longitude});")
+                webViewRef?.evaluateJavascript(
+                    "recenter(${userLocation.latitude}, ${userLocation.longitude});",
+                    null
+                )
             },
-            containerColor = Color.White,
-            contentColor = SafetyTealDark,
+            containerColor = if (isDarkTheme) DarkSurface else Color.White,
+            contentColor = SafetyTeal,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(10.dp)
@@ -321,18 +460,24 @@ fun GoogleMapsPlatformView(
 }
 
 private fun buildMapHtml(
-    userLat: Double,
-    userLng: Double,
+    initialLat: Double,
+    initialLng: Double,
     zonesJson: String,
     incidentsJson: String,
-    isSelectionMode: Boolean,
-    tileType: MapTileType
+    safeStationsJson: String,
+    tileType: MapTileType,
+    isDarkTheme: Boolean
 ): String {
     val tileUrl = when (tileType) {
         MapTileType.SATELLITE -> "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
         MapTileType.DARK -> "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         MapTileType.STREET -> "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
     }
+
+    val popupBg = if (isDarkTheme) "#0F1E33" else "#FFFFFF"
+    val popupTextColor = if (isDarkTheme) "#F8FAFC" else "#0F172A"
+    val popupSubTextColor = if (isDarkTheme) "#94A3B8" else "#475569"
+    val popupBorder = if (isDarkTheme) "#2E4B75" else "#CBD5E1"
 
     return """
     <!DOCTYPE html>
@@ -343,127 +488,262 @@ private fun buildMapHtml(
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-            html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #0A192F; font-family: -apple-system, Roboto, sans-serif; }
+            html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #0A192F; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
             .leaflet-control-attribution { display: none; }
+            
+            .leaflet-popup-content-wrapper {
+                background: $popupBg !important;
+                color: $popupTextColor !important;
+                border-radius: 12px !important;
+                border: 1px solid $popupBorder !important;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+                padding: 4px;
+            }
+            .leaflet-popup-tip {
+                background: $popupBg !important;
+            }
+
             .user-pulse {
-                width: 18px; height: 18px; background: #00B4D8; border-radius: 50%;
-                border: 2px solid #FFFFFF; box-shadow: 0 0 10px #00B4D8; animation: pulse 1.8s infinite;
+                width: 20px; height: 20px; background: #00B4D8; border-radius: 50%;
+                border: 2.5px solid #FFFFFF; box-shadow: 0 0 12px #00B4D8; animation: pulse 1.8s infinite;
             }
             @keyframes pulse {
                 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(0, 180, 216, 0.7); }
-                70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(0, 180, 216, 0); }
+                70% { transform: scale(1.15); box-shadow: 0 0 0 12px rgba(0, 180, 216, 0); }
                 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(0, 180, 216, 0); }
             }
+
             .sos-beacon {
-                width: 22px; height: 22px; background: #D32F2F; border-radius: 50%;
+                width: 24px; height: 24px; background: #D32F2F; border-radius: 50%;
                 border: 2px solid #FFFFFF; animation: sosPulse 1s infinite;
-                display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;
+                display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;
             }
             @keyframes sosPulse {
-                0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.8); }
-                70% { transform: scale(1.15); box-shadow: 0 0 0 12px rgba(211, 47, 47, 0); }
+                0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.85); }
+                70% { transform: scale(1.2); box-shadow: 0 0 0 14px rgba(211, 47, 47, 0); }
                 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
             }
-            .pin-selection {
-                width: 28px; height: 28px; background: #D32F2F; border-radius: 50% 50% 50% 0;
-                transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+
+            .station-badge {
+                width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+                justify-content: center; font-size: 14px; border: 2px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.35);
             }
+            .station-police { background: #0F2C59; }
+            .station-hospital { background: #DC2626; }
+            .station-women { background: #7C3AED; }
+
+            .pin-selection {
+                width: 28px; height: 28px; background: #E11D48; border-radius: 50% 50% 50% 0;
+                transform: rotate(-45deg); border: 2.5px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.45);
+            }
+
+            .search-beacon {
+                display: flex; align-items: center; justify-content: center;
+                animation: searchBounce 0.8s ease-in-out infinite alternate;
+            }
+            @keyframes searchBounce {
+                0% { transform: translateY(0); }
+                100% { transform: translateY(-8px); }
+            }
+
             .info-popup {
-                font-size: 12px; line-height: 1.4;
+                font-size: 13px; line-height: 1.5; color: $popupTextColor;
+            }
+            .info-popup .sub {
+                font-size: 11px; color: $popupSubTextColor; margin: 4px 0;
             }
             .route-btn {
-                display: inline-block; background: #0F2C59; color: white !important; padding: 4px 10px;
-                border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 6px; cursor: pointer;
+                display: inline-block; background: #0077B6; color: white !important; padding: 6px 12px;
+                border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 11px; margin-top: 6px; cursor: pointer;
+            }
+            .report-btn {
+                display: inline-block; background: #D32F2F; color: white !important; padding: 6px 12px;
+                border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 11px; margin-top: 6px; margin-left: 6px; cursor: pointer;
             }
         </style>
     </head>
     <body>
         <div id="map"></div>
         <script>
-            var map = L.map('map', { zoomControl: false }).setView([$userLat, $userLng], 14);
+            var map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([$initialLat, $initialLng], 14);
             L.tileLayer('$tileUrl', { maxZoom: 19 }).addTo(map);
 
-            // User Geolocation Pulse Marker
-            var userIcon = L.divIcon({ className: 'user-pulse', iconSize: [18, 18] });
-            var userMarker = L.marker([$userLat, $userLng], { icon: userIcon }).addTo(map);
-            userMarker.bindPopup("<div class='info-popup'><b>📍 Your Device Location</b><br>Kumbakonam / GPS Coordinates<br>Lat: $userLat, Lng: $userLng</div>");
+            // Layer Groups for dynamic, zero-reload updates
+            var userGroup = L.layerGroup().addTo(map);
+            var zonesLayer = L.layerGroup().addTo(map);
+            var stationsLayer = L.layerGroup().addTo(map);
+            var incidentsLayer = L.layerGroup().addTo(map);
+            var selectionLayer = L.layerGroup().addTo(map);
+            var searchLayer = L.layerGroup().addTo(map);
 
-            // Accuracy Circle (approx 50m)
-            L.circle([$userLat, $userLng], {
+            // User Geolocation Pulse Marker
+            var userIcon = L.divIcon({ className: 'user-pulse', iconSize: [20, 20] });
+            var userMarker = L.marker([$initialLat, $initialLng], { icon: userIcon }).addTo(userGroup);
+            userMarker.bindPopup("<div class='info-popup'><b>📍 Your Real-time Location</b><div class='sub'>Kumbakonam & Tamil Nadu GPS<br>Lat: $initialLat, Lng: $initialLng</div></div>");
+
+            var accuracyCircle = L.circle([$initialLat, $initialLng], {
                 radius: 60,
                 color: '#00B4D8',
                 fillColor: '#00B4D8',
                 fillOpacity: 0.15,
                 weight: 1
-            }).addTo(map);
+            }).addTo(userGroup);
 
-            // Verified Danger Zones
-            var zones = $zonesJson;
-            zones.forEach(function(z) {
-                var color = z.severity === 'HIGH' ? '#D32F2F' : '#F59E0B';
-                var circle = L.circle([z.lat, z.lng], {
-                    radius: z.radius,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.22,
-                    weight: 2
-                }).addTo(map);
+            function updateUserPosition(lat, lng) {
+                userMarker.setLatLng([lat, lng]);
+                accuracyCircle.setLatLng([lat, lng]);
+            }
 
-                var popupContent = "<div class='info-popup'>" +
-                    "<b style='color:" + color + "'>⚠️ DANGER ZONE: " + z.title + "</b><br>" +
-                    z.desc + "<br>" +
-                    "<b>Radius:</b> " + z.radius + "m • <b>Authority:</b> " + z.authority + "<br>" +
-                    "<a class='route-btn' onclick='routeTo(" + z.lat + "," + z.lng + ", \"" + z.title + "\")'>Get Directions (Google Maps)</a>" +
-                    "</div>";
+            function updateLayers(zones, incidents, stations) {
+                // Clear existing markers
+                zonesLayer.clearLayers();
+                stationsLayer.clearLayers();
+                incidentsLayer.clearLayers();
 
-                circle.bindPopup(popupContent);
-                circle.on('click', function() {
-                    if (window.AndroidBridge) {
-                        window.AndroidBridge.onZoneClicked(z.id);
-                    }
+                // Render Zones
+                zones.forEach(function(z) {
+                    var color = z.severity === 'HIGH' ? '#D32F2F' : '#F59E0B';
+                    var circle = L.circle([z.lat, z.lng], {
+                        radius: z.radius,
+                        color: color,
+                        fillColor: color,
+                        fillOpacity: 0.24,
+                        weight: 2
+                    }).addTo(zonesLayer);
+
+                    var popupContent = "<div class='info-popup'>" +
+                        "<b style='color:" + color + "'>⚠️ DANGER ZONE: " + z.title + "</b>" +
+                        "<div class='sub'>" + z.desc + "<br>" +
+                        "<b>Radius:</b> " + z.radius + "m • <b>Authority:</b> " + z.authority + "</div>" +
+                        "<a class='route-btn' onclick='routeTo(" + z.lat + "," + z.lng + ", \"" + z.title + "\")'>Directions (Google Maps)</a>" +
+                        "</div>";
+
+                    circle.bindPopup(popupContent);
+                    circle.on('click', function() {
+                        if (window.AndroidBridge) {
+                            window.AndroidBridge.onZoneClicked(z.id);
+                        }
+                    });
                 });
-            });
 
-            // Active SOS Incidents
-            var incidents = $incidentsJson;
-            incidents.forEach(function(inc) {
-                var sosIcon = L.divIcon({ className: 'sos-beacon', html: '!', iconSize: [22, 22] });
-                var m = L.marker([inc.lat, inc.lng], { icon: sosIcon }).addTo(map);
-                var popupContent = "<div class='info-popup'>" +
-                    "<b style='color:#D32F2F'>🚨 ACTIVE SOS: " + inc.id + "</b><br>" +
-                    "<b>Type:</b> " + inc.type + "<br>" +
-                    "<b>User:</b> " + inc.user + "<br>" +
-                    "<b>Status:</b> " + inc.status + "<br>" +
-                    "<a class='route-btn' onclick='routeTo(" + inc.lat + "," + inc.lng + ", \"" + inc.id + "\")'>Dispatch Route (Google Maps)</a>" +
-                    "</div>";
-                m.bindPopup(popupContent);
-            });
+                // Render Safe Stations
+                stations.forEach(function(stn) {
+                    var iconClass = 'station-police';
+                    var iconEmoji = '🛡️';
+                    if (stn.type === 'HOSPITAL') {
+                        iconClass = 'station-hospital';
+                        iconEmoji = '🏥';
+                    } else if (stn.type === 'WOMEN_HELP_DESK') {
+                        iconClass = 'station-women';
+                        iconEmoji = '🌸';
+                    }
 
-            // Selection Mode Pin
+                    var stnIcon = L.divIcon({
+                        className: 'station-badge ' + iconClass,
+                        html: iconEmoji,
+                        iconSize: [28, 28]
+                    });
+
+                    var sm = L.marker([stn.lat, stn.lng], { icon: stnIcon }).addTo(stationsLayer);
+                    var popupContent = "<div class='info-popup'>" +
+                        "<b>" + iconEmoji + " " + stn.name + "</b>" +
+                        "<div class='sub'><b>" + stn.typeLabel + "</b><br>" + stn.landmark + "<br>📞 24/7 Helpline: <b>" + stn.phone + "</b></div>" +
+                        "<a class='route-btn' onclick='routeTo(" + stn.lat + "," + stn.lng + ", \"" + stn.name + "\")'>Directions (Google Maps)</a>" +
+                        "</div>";
+                    sm.bindPopup(popupContent);
+                    sm.on('click', function() {
+                        if (window.AndroidBridge) {
+                            window.AndroidBridge.onStationClicked(stn.id);
+                        }
+                    });
+                });
+
+                // Render Incidents
+                incidents.forEach(function(inc) {
+                    var sosIcon = L.divIcon({ className: 'sos-beacon', html: '!', iconSize: [24, 24] });
+                    var m = L.marker([inc.lat, inc.lng], { icon: sosIcon }).addTo(incidentsLayer);
+                    var popupContent = "<div class='info-popup'>" +
+                        "<b style='color:#D32F2F'>🚨 ACTIVE SOS: " + inc.id + "</b>" +
+                        "<div class='sub'><b>Type:</b> " + inc.type + "<br>" +
+                        "<b>User:</b> " + inc.user + "<br>" +
+                        "<b>Landmark:</b> " + inc.landmark + "</div>" +
+                        "<a class='route-btn' onclick='routeTo(" + inc.lat + "," + inc.lng + ", \"" + inc.id + "\")'>Dispatch Route (Google Maps)</a>" +
+                        "</div>";
+                    m.bindPopup(popupContent);
+                });
+            }
+
+            // Populate initial layers
+            updateLayers($zonesJson, $incidentsJson, $safeStationsJson);
+
+            // Selection / Tap-to-Pin Marker
             var selectionMarker = null;
-            var isSelecting = $isSelectionMode;
 
             map.on('click', function(e) {
-                if (isSelecting) {
-                    if (selectionMarker) {
-                        selectionMarker.setLatLng(e.latlng);
-                    } else {
-                        var selIcon = L.divIcon({ className: 'pin-selection', iconSize: [28, 28] });
-                        selectionMarker = L.marker(e.latlng, { icon: selIcon }).addTo(map);
-                    }
-                    if (window.AndroidBridge) {
-                        window.AndroidBridge.onMapClicked(e.latlng.lat, e.latlng.lng);
-                    }
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+                if (selectionMarker) {
+                    selectionMarker.setLatLng(e.latlng);
+                } else {
+                    var selIcon = L.divIcon({ className: 'pin-selection', iconSize: [28, 28] });
+                    selectionMarker = L.marker(e.latlng, { icon: selIcon }).addTo(selectionLayer);
+                }
+                var popupContent = "<div class='info-popup'><b>📌 PINNED HAZARD / DESTINATION</b>" +
+                    "<div class='sub'>Lat: " + lat.toFixed(4) + ", Lng: " + lng.toFixed(4) + "</div>" +
+                    "<a class='route-btn' onclick='routeTo(" + lat + "," + lng + ", \"Pinned Point\")'>Get Directions</a>" +
+                    "<a class='report-btn' onclick='reportAt(" + lat + "," + lng + ")'>Report Hazard Here</a>" +
+                    "</div>";
+                selectionMarker.bindPopup(popupContent).openPopup();
+
+                if (window.AndroidBridge) {
+                    window.AndroidBridge.onMapClicked(lat, lng);
                 }
             });
 
+            var searchMarker = null;
+            function searchLocation(lat, lng, label) {
+                map.flyTo([lat, lng], 15, { duration: 1.0 });
+                if (searchMarker) {
+                    searchMarker.setLatLng([lat, lng]);
+                } else {
+                    var searchIcon = L.divIcon({
+                        className: 'search-beacon',
+                        html: '<div style=\"background:#00B4D8;border:2.5px solid white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:white;font-size:16px;box-shadow:0 3px 10px rgba(0,0,0,0.45);\">🔍</div>',
+                        iconSize: [32, 32]
+                    });
+                    searchMarker = L.marker([lat, lng], { icon: searchIcon }).addTo(searchLayer);
+                }
+                var popupHtml = "<div class='info-popup'><b style='color:#0077B6'>🔍 SEARCHED LOCATION</b>" +
+                    "<div class='sub'><b>" + label + "</b><br>Lat: " + lat.toFixed(4) + ", Lng: " + lng.toFixed(4) + "</div>" +
+                    "<a class='route-btn' onclick='routeTo(" + lat + "," + lng + ", \"" + label + "\")'>Directions (Google Maps)</a>" +
+                    "<a class='report-btn' onclick='reportAt(" + lat + "," + lng + ")'>Report Hazard Here</a>" +
+                    "</div>";
+                searchMarker.bindPopup(popupHtml).openPopup();
+            }
+
+            function dropSelectedPin(lat, lng, label) {
+                if (selectionMarker) {
+                    selectionMarker.setLatLng([lat, lng]);
+                } else {
+                    var selIcon = L.divIcon({ className: 'pin-selection', iconSize: [28, 28] });
+                    selectionMarker = L.marker([lat, lng], { icon: selIcon }).addTo(selectionLayer);
+                }
+                selectionMarker.bindPopup("<div class='info-popup'><b>📌 PINNED LOCATION</b><div class='sub'>" + label + "<br>Lat: " + lat.toFixed(4) + ", Lng: " + lng.toFixed(4) + "</div><a class='route-btn' onclick='routeTo(" + lat + "," + lng + ", \"" + label + "\")'>Directions (Google Maps)</a></div>").openPopup();
+            }
+
             function recenter(lat, lng) {
-                map.flyTo([lat, lng], 15);
+                map.flyTo([lat, lng], 15, { duration: 0.8 });
             }
 
             function routeTo(lat, lng, landmark) {
                 if (window.AndroidBridge) {
                     window.AndroidBridge.onRouteRequested(lat, lng, landmark);
+                }
+            }
+
+            function reportAt(lat, lng) {
+                if (window.AndroidBridge) {
+                    window.AndroidBridge.onReportRequested(lat, lng);
                 }
             }
         </script>

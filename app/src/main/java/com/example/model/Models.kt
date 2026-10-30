@@ -186,3 +186,19 @@ data class BuddySosAlert(
     val activeSirenAlert: Boolean = true
 )
 
+enum class SafeStationType(val label: String) {
+    POLICE("Police Station / Outpost"),
+    HOSPITAL("Hospital / Emergency Care"),
+    WOMEN_HELP_DESK("All-Women Safety Desk"),
+    SHELTER("Safe Haven / Shelter")
+}
+
+data class SafeStation(
+    val id: String,
+    val name: String,
+    val type: SafeStationType,
+    val location: LocationPoint,
+    val phone: String,
+    val is24Hours: Boolean = true,
+    val jurisdiction: String = "Tamil Nadu Police / Health Dept"
+)

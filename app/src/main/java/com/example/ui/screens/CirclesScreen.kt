@@ -4,10 +4,15 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -325,6 +330,7 @@ private fun BuddyGroupContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
 
     LazyColumn(
         modifier = modifier
@@ -337,43 +343,51 @@ private fun BuddyGroupContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder)
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDark) DarkSurface else Color.White
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SafetyTealLight),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            color = Color.White,
+                            shape = RoundedCornerShape(10.dp),
+                            shadowElevation = 2.dp,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(42.dp)
                         ) {
-                            Icon(Icons.Default.Diversity3, contentDescription = null, tint = SafetyTealDark, modifier = Modifier.size(20.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.safeguard_official_logo),
+                                contentDescription = "SAFEGUARD Official Logo",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize().padding(2.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "SAFEGUARD BUDDY SYSTEM",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = SafetyTealDark,
+                                color = SafetyTeal,
                                 letterSpacing = 0.5.sp
                             )
                             Text(
                                 text = "Your Personal First-Responder Circle",
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = SafeguardNavy
+                                color = if (isDark) DarkTextPrimary else SafeguardNavy
                             )
                         }
                     }
 
                     Text(
                         text = "When you trigger SOS, your Buddies receive an immediate loud alarm, live GPS coordinates, battery level, and 1-tap Google Maps directions to reach you in Kumbakonam.",
-                        fontSize = 11.sp,
-                        color = SlateTextDark,
-                        lineHeight = 15.sp,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = if (isDark) DarkTextSecondary else SlateTextDark,
+                        lineHeight = 16.sp,
                         modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
                     )
 
@@ -384,25 +398,29 @@ private fun BuddyGroupContent(
                     ) {
                         Button(
                             onClick = onOpenInvite,
-                            colors = ButtonDefaults.buttonColors(containerColor = SafetyTealDark),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SafetyTealDark,
+                                contentColor = Color.White
+                            ),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.weight(1f).height(38.dp).testTag("button_invite_buddy")
+                            modifier = Modifier.weight(1f).height(40.dp).testTag("button_invite_buddy")
                         ) {
                             Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Invite Buddy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Invite Buddy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
                             onClick = onOpenJoin,
                             shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.weight(1f).height(38.dp).testTag("button_join_with_code")
+                            modifier = Modifier.weight(1f).height(40.dp).testTag("button_join_with_code")
                         ) {
-                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = SafeguardNavy)
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = SafetyTeal)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Enter Code", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SafeguardNavy)
+                            Text("Enter Code", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isDark) DarkTextPrimary else SafeguardNavy)
                         }
                     }
 
@@ -412,14 +430,14 @@ private fun BuddyGroupContent(
                     OutlinedButton(
                         onClick = onSimulateSos,
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = EmergencyRed),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, EmergencyRed.copy(alpha = 0.6f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = EmergencyRedBright),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, EmergencyRedBright.copy(alpha = 0.7f)),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.fillMaxWidth().height(36.dp).testTag("button_simulate_buddy_sos")
+                        modifier = Modifier.fillMaxWidth().height(38.dp).testTag("button_simulate_buddy_sos")
                     ) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmergencyRed)
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmergencyRedBright)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simulate Inbound Buddy SOS (Competition Demo)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmergencyRed)
+                        Text("Simulate Inbound Buddy SOS (Demo)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EmergencyRedBright)
                     }
                 }
             }
@@ -430,8 +448,14 @@ private fun BuddyGroupContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = if (isBgRunning) SafeGreenLight else Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isBgRunning) SafeGreen else SlateBorder)
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isBgRunning) {
+                        if (isDark) Color(0xFF064E3B) else SafeGreenLight
+                    } else {
+                        if (isDark) DarkSurface else Color.White
+                    }
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isBgRunning) SafeGreen else (if (isDark) DarkBorder else SlateBorder))
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp),
@@ -445,22 +469,22 @@ private fun BuddyGroupContent(
                         Icon(
                             imageVector = if (isBgRunning) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
                             contentDescription = null,
-                            tint = if (isBgRunning) SafeGreenDark else SlateTextMuted,
+                            tint = if (isBgRunning) SafeGreen else (if (isDark) DarkTextSecondary else SlateTextMuted),
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (isBgRunning) "Foreground GPS Service Running" else "Background Guardian Stopped",
-                                fontSize = 12.sp,
+                                text = if (isBgRunning) "Foreground GPS Service Running" else "Background Guardian Standby",
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = SafeguardNavy
+                                color = if (isDark) DarkTextPrimary else SafeguardNavy
                             )
                             Text(
-                                text = if (isBgRunning) "Live coordinates shared continuously even when phone is locked" else "Tap toggle to keep GPS alive in background",
-                                fontSize = 10.sp,
-                                color = SlateTextDark,
-                                lineHeight = 13.sp
+                                text = if (isBgRunning) "Live GPS stream active for trusted contacts" else "Toggle ON for continuous background beacon",
+                                fontSize = 11.sp,
+                                color = if (isDark) DarkTextSecondary else SlateTextSecondary,
+                                lineHeight = 14.sp
                             )
                         }
                     }
@@ -470,7 +494,7 @@ private fun BuddyGroupContent(
                         onCheckedChange = { onToggleBgService() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = SafeGreenDark
+                            checkedTrackColor = SafeGreen
                         ),
                         modifier = Modifier.testTag("switch_background_location_service")
                     )
@@ -541,13 +565,17 @@ private fun BuddyCard(
     onShareCode: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) DarkSurface else Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -559,14 +587,14 @@ private fun BuddyCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(
-                                when (buddy.relation) {
+                                if (isDark) DarkSurfaceVariant else when (buddy.relation) {
                                     BuddyRelation.PARENT -> PrimaryBlueLight
                                     BuddyRelation.CLASSMATE -> SafetyTealLight
                                     BuddyRelation.TEACHER -> WarningAmberLight
-                                    else -> SlateBorder.copy(alpha = 0.3f)
+                                    else -> Color(0xFFE2E8F0)
                                 }
                             ),
                         contentAlignment = Alignment.Center
@@ -574,38 +602,38 @@ private fun BuddyCard(
                         Text(
                             text = buddy.name.take(2).uppercase(),
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            color = SafeguardNavy
+                            fontSize = 15.sp,
+                            color = if (isDark) SafetyTeal else SafeguardNavy
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = buddy.name,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = SafeguardNavy
+                                fontSize = 14.sp,
+                                color = if (isDark) DarkTextPrimary else SafeguardNavy
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = when (buddy.status) {
-                                    BuddyStatus.ACTIVE -> SafeGreenLight
-                                    BuddyStatus.PENDING_INVITE -> WarningAmberLight
-                                    BuddyStatus.INVITATION_RECEIVED -> SafetyTealLight
+                                    BuddyStatus.ACTIVE -> if (isDark) Color(0xFF064E3B) else SafeGreenLight
+                                    BuddyStatus.PENDING_INVITE -> if (isDark) Color(0xFF78350F) else WarningAmberLight
+                                    BuddyStatus.INVITATION_RECEIVED -> if (isDark) Color(0xFF1E3A5F) else SafetyTealLight
                                 }
                             ) {
                                 Text(
                                     text = buddy.status.label,
-                                    fontSize = 9.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = when (buddy.status) {
-                                        BuddyStatus.ACTIVE -> SafeGreenDark
-                                        BuddyStatus.PENDING_INVITE -> WarningAmber
-                                        BuddyStatus.INVITATION_RECEIVED -> SafetyTealDark
+                                        BuddyStatus.ACTIVE -> if (isDark) SafeGreenLight else SafeGreenDark
+                                        BuddyStatus.PENDING_INVITE -> if (isDark) WarningAmberLight else WarningAmber
+                                        BuddyStatus.INVITATION_RECEIVED -> if (isDark) Color.White else SafetyTealDark
                                     },
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
@@ -614,25 +642,26 @@ private fun BuddyCard(
 
                         Text(
                             text = "${buddy.relation.label} • ${buddy.phone}",
-                            fontSize = 11.sp,
-                            color = SlateTextMuted
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isDark) DarkTextSecondary else SlateTextSecondary
                         )
                         Text(
                             text = buddy.lastCheckIn,
-                            fontSize = 10.sp,
-                            color = SlateTextDark
+                            fontSize = 11.sp,
+                            color = if (isDark) SafetyTeal else PrimaryBlue
                         )
                     }
                 }
 
                 // Call action
-                IconButton(onClick = onCall, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", tint = SafetyTealDark, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onCall, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = SafetyTeal, modifier = Modifier.size(20.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = SlateBorder.copy(alpha = 0.5f))
+            HorizontalDivider(color = if (isDark) DarkBorder else SlateBorder.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
 
             // Privileges & Permissions Toggles
@@ -645,45 +674,45 @@ private fun BuddyCard(
                     FilterChip(
                         selected = buddy.isTrustedForSos,
                         onClick = onToggleSos,
-                        label = { Text("Loud SOS Siren", fontSize = 10.sp) },
+                        label = { Text("Loud SOS Siren", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
                             Icon(
                                 if (buddy.isTrustedForSos) Icons.Default.Campaign else Icons.Default.VolumeOff,
                                 contentDescription = null,
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = EmergencyRedLight,
-                            selectedLabelColor = EmergencyRedDark
+                            selectedContainerColor = if (isDark) Color(0xFF5C101B) else EmergencyRedLight,
+                            selectedLabelColor = if (isDark) EmergencyRedBright else EmergencyRedDark
                         )
                     )
 
                     FilterChip(
                         selected = buddy.canViewLiveLocation,
                         onClick = onToggleLocation,
-                        label = { Text("GPS Access", fontSize = 10.sp) },
+                        label = { Text("GPS Access", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
                             Icon(
                                 if (buddy.canViewLiveLocation) Icons.Default.LocationOn else Icons.Default.LocationOff,
                                 contentDescription = null,
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SafetyTealLight,
-                            selectedLabelColor = SafetyTealDark
+                            selectedContainerColor = if (isDark) Color(0xFF1E3A5F) else SafetyTealLight,
+                            selectedLabelColor = if (isDark) Color.White else SafetyTealDark
                         )
                     )
                 }
 
                 if (buddy.status == BuddyStatus.PENDING_INVITE) {
                     TextButton(onClick = onShareCode, contentPadding = PaddingValues(horizontal = 6.dp)) {
-                        Text("Share Code", fontSize = 10.sp, color = PrimaryBlue, fontWeight = FontWeight.Bold)
+                        Text("Share Code", fontSize = 11.sp, color = SafetyTeal, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "Remove", tint = SlateTextMuted, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Remove", tint = if (isDark) DarkTextSecondary else SlateTextMuted, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -703,6 +732,7 @@ private fun IncomingBuddySosCard(
     onCall: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
     val distanceMeters = LocationHelper.distanceInMeters(
         currentLocation.latitude,
         currentLocation.longitude,
@@ -728,7 +758,7 @@ private fun IncomingBuddySosCard(
             .border(2.dp, EmergencyRed.copy(alpha = borderAlpha), RoundedCornerShape(16.dp))
             .testTag("card_incoming_buddy_sos"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = EmergencyRedLight)
+        colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF450A0A) else EmergencyRedLight)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -752,20 +782,20 @@ private fun IncomingBuddySosCard(
                             text = "🚨 BUDDY EMERGENCY SOS DISPATCHED",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = EmergencyRedDark,
+                            color = if (isDark) Color(0xFFFECACA) else EmergencyRedDark,
                             letterSpacing = 0.5.sp
                         )
                         Text(
                             text = "${alert.victimName} needs immediate assistance!",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeguardNavy
+                            color = if (isDark) Color.White else SafeguardNavy
                         )
                     }
                 }
 
                 IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = SlateTextDark, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = if (isDark) Color.White else SlateTextDark, modifier = Modifier.size(16.dp))
                 }
             }
 
@@ -775,25 +805,25 @@ private fun IncomingBuddySosCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
-                color = Color.White,
-                border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder)
+                color = if (isDark) DarkSurface else Color.White,
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder)
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text(
                         text = "📍 Location: ${alert.location.landmark}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = SafeguardNavy
+                        color = if (isDark) DarkTextPrimary else SafeguardNavy
                     )
                     Text(
                         text = "📏 Distance: ${"%.2f".format(distanceMeters / 1000.0)} km from you • Lat: ${"%.4f".format(alert.location.latitude)}, Lng: ${"%.4f".format(alert.location.longitude)}",
                         fontSize = 11.sp,
-                        color = SlateTextDark
+                        color = if (isDark) DarkTextSecondary else SlateTextDark
                     )
                     Text(
                         text = "⚠️ Alert: ${alert.emergencyType} • 🔋 Battery: ${alert.batteryPercent}%",
                         fontSize = 11.sp,
-                        color = EmergencyRedDark,
+                        color = if (isDark) EmergencyRedBright else EmergencyRedDark,
                         fontWeight = FontWeight.Medium
                     )
 
@@ -803,7 +833,7 @@ private fun IncomingBuddySosCard(
                             text = "✅ Your response: ${alert.responseType ?: "Acknowledged"}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeGreenDark
+                            color = if (isDark) SafeGreenLight else SafeGreenDark
                         )
                     }
                 }
@@ -843,12 +873,14 @@ private fun IncomingBuddySosCard(
                 OutlinedButton(
                     onClick = onCall,
                     shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = EmergencyRedBright),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmergencyRedBright.copy(alpha = 0.7f)),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     modifier = Modifier.weight(0.9f).height(38.dp)
                 ) {
-                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmergencyRed)
+                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmergencyRedBright)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Call", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmergencyRed)
+                    Text("Call", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmergencyRedBright)
                 }
             }
         }
@@ -863,6 +895,7 @@ private fun InviteBuddyDialog(
     onDismiss: () -> Unit,
     onSendInvite: (name: String, phone: String, relation: BuddyRelation) -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var relation by remember { mutableStateOf(BuddyRelation.PARENT) }
@@ -870,14 +903,14 @@ private fun InviteBuddyDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Invite Trusted Buddy", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SafeguardNavy)
+            Text("Invite Trusted Buddy", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDark) DarkTextPrimary else SafeguardNavy)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "Buddies form your private safety group. When you trigger SOS, they receive audible alerts and live GPS tracking.",
-                    fontSize = 11.sp,
-                    color = SlateTextDark
+                    fontSize = 12.sp,
+                    color = if (isDark) DarkTextSecondary else SlateTextDark
                 )
 
                 OutlinedTextField(
@@ -896,13 +929,13 @@ private fun InviteBuddyDialog(
                     modifier = Modifier.fillMaxWidth().testTag("input_buddy_phone")
                 )
 
-                Text("RELATIONSHIP:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SlateTextMuted)
+                Text("RELATIONSHIP:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isDark) SafetyTeal else SlateTextMuted)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(BuddyRelation.values()) { rel ->
                         FilterChip(
                             selected = relation == rel,
                             onClick = { relation = rel },
-                            label = { Text(rel.label, fontSize = 10.sp) }
+                            label = { Text(rel.label, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
                         )
                     }
                 }
@@ -924,7 +957,7 @@ private fun InviteBuddyDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = SlateTextMuted)
+                Text("Cancel", color = if (isDark) DarkTextSecondary else SlateTextMuted)
             }
         }
     )
@@ -938,19 +971,20 @@ private fun JoinBuddyDialog(
     onDismiss: () -> Unit,
     onAcceptCode: (code: String) -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
     var code by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Join Buddy Safety Group", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SafeguardNavy)
+            Text("Join Buddy Safety Group", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDark) DarkTextPrimary else SafeguardNavy)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "Enter the 6-character Buddy Invitation Code shared by your family member or classmate (e.g., SG-TN-8890).",
                     fontSize = 12.sp,
-                    color = SlateTextDark
+                    color = if (isDark) DarkTextSecondary else SlateTextDark
                 )
 
                 OutlinedTextField(
@@ -979,7 +1013,7 @@ private fun JoinBuddyDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = SlateTextMuted)
+                Text("Cancel", color = if (isDark) DarkTextSecondary else SlateTextMuted)
             }
         }
     )
@@ -1002,6 +1036,8 @@ private fun CommunityCirclesContent(
     onSendMessage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
+
     Column(modifier = modifier.fillMaxSize()) {
         // Circle Selector Pills
         LazyRow(
@@ -1014,14 +1050,14 @@ private fun CommunityCirclesContent(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onSelectCircle(circle.first) },
-                    color = if (isSelected) SafetyTeal else Color.White,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SafetyTealDark else SlateBorder)
+                    color = if (isSelected) SafetyTeal else (if (isDark) DarkSurface else Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SafetyTealDark else (if (isDark) DarkBorder else SlateBorder))
                 ) {
                     Text(
                         text = circle.second,
                         fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) SafeguardNavyDark else SlateTextDark,
+                        color = if (isSelected) SafeguardNavyDark else (if (isDark) DarkTextPrimary else SlateTextDark),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     )
                 }
@@ -1034,7 +1070,8 @@ private fun CommunityCirclesContent(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = if (isDark) DarkSurface else Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder),
             elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
@@ -1042,7 +1079,7 @@ private fun CommunityCirclesContent(
                     text = "1-TAP QUICK SAFETY CHECK-INS:",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = SlateTextMuted,
+                    color = if (isDark) SafetyTeal else SlateTextMuted,
                     letterSpacing = 0.5.sp
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1050,8 +1087,8 @@ private fun CommunityCirclesContent(
                     item {
                         QuickCheckInChip(
                             text = "Reached Safely",
-                            color = SafeGreenDark,
-                            bgColor = SafeGreenLight,
+                            color = if (isDark) SafeGreenLight else SafeGreenDark,
+                            bgColor = if (isDark) Color(0xFF064E3B) else SafeGreenLight,
                             icon = Icons.Default.CheckCircle,
                             onClick = {
                                 viewModel.sendCircleMessage(
@@ -1067,7 +1104,7 @@ private fun CommunityCirclesContent(
                         QuickCheckInChip(
                             text = "Bus Delayed, Safe",
                             color = WarningAmber,
-                            bgColor = WarningAmberLight,
+                            bgColor = if (isDark) Color(0xFF78350F) else WarningAmberLight,
                             icon = Icons.Default.DirectionsBus,
                             onClick = {
                                 viewModel.sendCircleMessage(
@@ -1082,8 +1119,8 @@ private fun CommunityCirclesContent(
                     item {
                         QuickCheckInChip(
                             text = "Walking Home",
-                            color = SafetyTealDark,
-                            bgColor = SafetyTealLight,
+                            color = if (isDark) SafetyTeal else SafetyTealDark,
+                            bgColor = if (isDark) Color(0xFF134E4A) else SafetyTealLight,
                             icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                             onClick = {
                                 viewModel.sendCircleMessage(
@@ -1098,8 +1135,8 @@ private fun CommunityCirclesContent(
                     item {
                         QuickCheckInChip(
                             text = "Please Call Me",
-                            color = EmergencyRed,
-                            bgColor = EmergencyRedLight,
+                            color = EmergencyRedBright,
+                            bgColor = if (isDark) Color(0xFF450A0A) else EmergencyRedLight,
                             icon = Icons.AutoMirrored.Filled.PhoneCallback,
                             onClick = {
                                 viewModel.sendCircleMessage(
@@ -1132,7 +1169,8 @@ private fun CommunityCirclesContent(
         // Bottom Message Composer
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
+            color = if (isDark) DarkSurface else Color.White,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (isDark) DarkBorder else SlateBorder),
             shadowElevation = 8.dp
         ) {
             Row(
@@ -1144,9 +1182,17 @@ private fun CommunityCirclesContent(
                 OutlinedTextField(
                     value = messageInput,
                     onValueChange = onMessageChange,
-                    placeholder = { Text("Send message to circle...", fontSize = 12.sp) },
+                    placeholder = { Text("Send message to circle...", fontSize = 12.sp, color = if (isDark) DarkTextSecondary else SlateTextMuted) },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SafetyTeal,
+                        unfocusedBorderColor = if (isDark) DarkBorder else SlateBorder,
+                        focusedContainerColor = if (isDark) DarkSurfaceVariant else Color.White,
+                        unfocusedContainerColor = if (isDark) DarkSurfaceVariant else Color.White,
+                        focusedTextColor = if (isDark) DarkTextPrimary else SafeguardNavy,
+                        unfocusedTextColor = if (isDark) DarkTextPrimary else SafeguardNavy
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .testTag("input_circle_message")
@@ -1194,6 +1240,7 @@ private fun QuickCheckInChip(
 
 @Composable
 private fun MessageBubble(msg: SafetyMessage, isMine: Boolean) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == DarkBackground
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val formattedTime = timeFormat.format(Date(msg.timestamp))
 
@@ -1209,13 +1256,13 @@ private fun MessageBubble(msg: SafetyMessage, isMine: Boolean) {
                 text = msg.senderName,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isMine) SafetyTealDark else SafeguardNavy
+                color = if (isMine) SafetyTeal else (if (isDark) DarkTextPrimary else SafeguardNavy)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = formattedTime,
                 fontSize = 9.sp,
-                color = SlateTextMuted
+                color = if (isDark) DarkTextSecondary else SlateTextMuted
             )
         }
 
@@ -1226,16 +1273,35 @@ private fun MessageBubble(msg: SafetyMessage, isMine: Boolean) {
                 bottomStart = if (isMine) 14.dp else 2.dp,
                 bottomEnd = if (isMine) 2.dp else 14.dp
             ),
-            color = if (msg.isQuickCheckIn) SafeGreenLight else if (isMine) SafetyTealLight else Color.White,
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (msg.isQuickCheckIn) SafeGreen else SlateBorder),
+            color = if (msg.isQuickCheckIn) {
+                if (isDark) Color(0xFF064E3B) else SafeGreenLight
+            } else if (isMine) {
+                if (isDark) Color(0xFF134E4A) else SafetyTealLight
+            } else {
+                if (isDark) DarkSurface else Color.White
+            },
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (msg.isQuickCheckIn) SafeGreen else (if (isDark) DarkBorder else SlateBorder)
+            ),
             modifier = Modifier.widthIn(max = 290.dp)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
                 if (msg.isQuickCheckIn) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Verified, contentDescription = null, tint = SafeGreenDark, modifier = Modifier.size(14.dp))
+                        Icon(
+                            Icons.Default.Verified,
+                            contentDescription = null,
+                            tint = if (isDark) SafeGreenLight else SafeGreenDark,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("QUICK SAFETY CHECK-IN", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = SafeGreenDark)
+                        Text(
+                            "QUICK SAFETY CHECK-IN",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isDark) SafeGreenLight else SafeGreenDark
+                        )
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                 }
@@ -1243,7 +1309,7 @@ private fun MessageBubble(msg: SafetyMessage, isMine: Boolean) {
                 Text(
                     text = msg.message,
                     fontSize = 12.sp,
-                    color = SlateTextDark,
+                    color = if (isDark) DarkTextPrimary else SlateTextDark,
                     lineHeight = 15.sp
                 )
 
@@ -1253,7 +1319,7 @@ private fun MessageBubble(msg: SafetyMessage, isMine: Boolean) {
                         text = "📍 ${msg.locationTag}",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
-                        color = SafeguardNavy
+                        color = if (isDark) SafetyTeal else SafeguardNavy
                     )
                 }
             }

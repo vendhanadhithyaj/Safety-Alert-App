@@ -41,6 +41,9 @@ object SafeguardRepository {
     private val _incomingBuddySosAlert = MutableStateFlow<BuddySosAlert?>(null)
     val incomingBuddySosAlert: StateFlow<BuddySosAlert?> = _incomingBuddySosAlert.asStateFlow()
 
+    private val _safeStations = MutableStateFlow<List<SafeStation>>(emptyList())
+    val safeStations: StateFlow<List<SafeStation>> = _safeStations.asStateFlow()
+
     init {
         seedInitialData()
     }
@@ -138,6 +141,59 @@ object SafeguardRepository {
             EmergencyContact("Kumbakonam Taluk Police Station", "04352420100", "Kumbakonam Local", "Rural & Sub-division jurisdiction, Kumbakonam", true),
             EmergencyContact("Kumbakonam Government Hospital (GH)", "04352424050", "Kumbakonam Local", "Government District Headquarters Hospital, Casualty", true)
         )
+
+        val initialStations = listOf(
+            SafeStation(
+                id = "STN-KUM-01",
+                name = "Kumbakonam East Police Station",
+                type = SafeStationType.POLICE,
+                location = LocationPoint(10.9608, 79.3875, "East Station Rd, Kumbakonam", "Thanjavur", "Tamil Nadu"),
+                phone = "04352430100"
+            ),
+            SafeStation(
+                id = "STN-KUM-02",
+                name = "Kumbakonam All Women Police Station",
+                type = SafeStationType.WOMEN_HELP_DESK,
+                location = LocationPoint(10.9632, 79.3842, "Kachery Rd, Kumbakonam", "Thanjavur", "Tamil Nadu"),
+                phone = "04352402100"
+            ),
+            SafeStation(
+                id = "STN-KUM-03",
+                name = "Kumbakonam Government Hospital (GH)",
+                type = SafeStationType.HOSPITAL,
+                location = LocationPoint(10.9645, 79.3855, "GH Casualty Ward, Kumbakonam", "Thanjavur", "Tamil Nadu"),
+                phone = "04352424050"
+            ),
+            SafeStation(
+                id = "STN-KUM-04",
+                name = "Kumbakonam Taluk Police Station",
+                type = SafeStationType.POLICE,
+                location = LocationPoint(10.9570, 79.3760, "Taluk Office Rd, Kumbakonam", "Thanjavur", "Tamil Nadu"),
+                phone = "04352420100"
+            ),
+            SafeStation(
+                id = "STN-KUM-05",
+                name = "Swamimalai Police Outpost",
+                type = SafeStationType.POLICE,
+                location = LocationPoint(10.9520, 79.3560, "Swamimalai Temple Access, Kumbakonam", "Thanjavur", "Tamil Nadu"),
+                phone = "04352454100"
+            ),
+            SafeStation(
+                id = "STN-TNJ-06",
+                name = "Thanjavur Medical College Hospital Emergency",
+                type = SafeStationType.HOSPITAL,
+                location = LocationPoint(10.7580, 79.1050, "Medical College Road, Thanjavur", "Thanjavur", "Tamil Nadu"),
+                phone = "04362240024"
+            ),
+            SafeStation(
+                id = "STN-CHE-07",
+                name = "Chennai Central Women & Child Help Desk",
+                type = SafeStationType.WOMEN_HELP_DESK,
+                location = LocationPoint(13.0827, 80.2707, "Poonamallee High Rd, Chennai", "Chennai", "Tamil Nadu"),
+                phone = "1091"
+            )
+        )
+        _safeStations.value = initialStations
 
         // Initial Circle Messages
         _circleMessages.value = listOf(

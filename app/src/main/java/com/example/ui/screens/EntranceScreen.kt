@@ -56,9 +56,9 @@ fun EntranceScreen(
         label = "pulse_scale"
     )
 
-    // Optional 4-second auto-enter countdown with skip affordance
+    // 2-second entrance preview for swift emergency access
     LaunchedEffect(Unit) {
-        val totalSteps = 40
+        val totalSteps = 20
         for (i in 0..totalSteps) {
             delay(100)
             autoEnterProgress = 1f - (i.toFloat() / totalSteps)
@@ -84,7 +84,7 @@ fun EntranceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -139,9 +139,9 @@ fun EntranceScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Hero Section: Crisp SAFEGUARD Logo with Animated Pulse Ring
+            // Hero Section: Full-Width Crisp SAFEGUARD Brand Logo with Animated Ambient Halo
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
@@ -149,78 +149,68 @@ fun EntranceScreen(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(240.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
                         .scale(pulseScale)
                 ) {
                     // Outer ambient glowing halo
                     Box(
                         modifier = Modifier
-                            .size(230.dp)
-                            .clip(CircleShape)
+                            .fillMaxWidth(0.96f)
+                            .height(236.dp)
+                            .clip(RoundedCornerShape(26.dp))
                             .background(
                                 Brush.radialGradient(
                                     colors = listOf(
-                                        SafetyTeal.copy(alpha = 0.25f),
-                                        EmergencyRed.copy(alpha = 0.15f),
+                                        SafetyTeal.copy(alpha = 0.35f),
+                                        EmergencyRedBright.copy(alpha = 0.20f),
                                         Color.Transparent
                                     )
                                 )
                             )
                     )
 
-                    // Logo Card container with clean white background so the official logo colors pop vividly
+                    // Hero Logo Card: Crisp White Container for maximum contrast and zero clipping
                     Surface(
                         modifier = Modifier
-                            .fillMaxWidth(0.92f)
-                            .height(170.dp)
-                            .clip(RoundedCornerShape(22.dp))
-                            .border(2.dp, SafetyTeal.copy(alpha = 0.6f), RoundedCornerShape(22.dp)),
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(
+                                2.dp,
+                                Brush.horizontalGradient(
+                                    listOf(SafetyTeal, EmergencyRedBright, SafetyTeal)
+                                ),
+                                RoundedCornerShape(24.dp)
+                            ),
                         color = Color.White,
-                        shadowElevation = 12.dp
+                        shadowElevation = 14.dp
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.safeguard_logo),
-                            contentDescription = "Official SAFEGUARD Logo",
+                            painter = painterResource(id = R.drawable.safeguard_official_logo),
+                            contentDescription = "Official SAFEGUARD Emergency & Safety App Logo",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(12.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
                                 .testTag("entrance_safeguard_logo")
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Mission & Slogan
-                Text(
-                    text = "SAFEGUARD",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    letterSpacing = 2.sp
-                )
-
-                Text(
-                    text = "EMERGENCY & COMMUNITY SAFETY",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = SafetyTeal,
-                    letterSpacing = 1.sp
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Official Slogan in prominent high-contrast container
                 Surface(
                     color = SafeguardNavyCard,
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.4f)),
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, SafetyTeal.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Campaign,
@@ -232,7 +222,7 @@ fun EntranceScreen(
                         Text(
                             text = "One tap to alert. A network to protect.",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
                             textAlign = TextAlign.Center
                         )
@@ -242,11 +232,12 @@ fun EntranceScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Kumbakonam & Tamil Nadu State Innovation Project",
+                    text = "Tamil Nadu Safety & Rapid Emergency Response Grid\nKumbakonam Innovation Project",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFFCBD5E1),
-                    textAlign = TextAlign.Center
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFE2E8F0),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 16.sp
                 )
             }
 
@@ -353,7 +344,7 @@ fun EntranceScreen(
                 OutlinedButton(
                     onClick = {
                         viewModel.setPortal(AppPortal.SAFETY_NETWORK)
-                        com.example.data.SafeguardRepository.switchRole(UserRole.POLICE, "TN-OFFICER-77")
+                        com.example.data.SafeguardRepository.switchRole(UserRole.RESPONDER, "TN-OFFICER-77")
                         onEnterApp()
                     },
                     modifier = Modifier

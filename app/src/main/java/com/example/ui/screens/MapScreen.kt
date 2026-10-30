@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -26,23 +27,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.model.DangerZone
-import com.example.model.LocationPoint
-import com.example.model.ReportCategory
+import com.example.model.*
 import com.example.ui.SafeguardUiState
 import com.example.ui.SafeguardViewModel
+import com.example.ui.ThemeMode
 import com.example.ui.theme.*
 import com.example.util.EmergencyActions
 import com.example.util.LocationHelper
 import java.text.SimpleDateFormat
 import java.util.*
 
-enum class MapFilter {
-    ALL,
-    DANGER_ZONES,
-    POLICE_BOOTHS,
-    SHELTERS_HOSPITALS,
-    ACTIVE_INCIDENTS
+enum class MapFilter(val label: String) {
+    ALL("All Layers"),
+    DANGER_ZONES("Danger Zones"),
+    POLICE_BOOTHS("Police & Desks"),
+    SHELTERS_HOSPITALS("Hospitals & Care"),
+    ACTIVE_INCIDENTS("Active SOS")
 }
 
 enum class MapDisplayMode {
@@ -50,6 +50,7 @@ enum class MapDisplayMode {
     RADAR_GRID
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     viewModel: SafeguardViewModel,
@@ -57,14 +58,29 @@ fun MapScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isSystemDark = isSystemInDarkTheme()
+    val isDarkTheme = when (uiState.themeMode) {
+        ThemeMode.SYSTEM -> isSystemDark
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+    }
+
     val dangerZones by viewModel.dangerZones.collectAsState()
     val activeIncidents by viewModel.allIncidents.collectAsState()
+    val safeStations by viewModel.safeStations.collectAsState()
     val activeLiveShares by viewModel.activeLiveShares.collectAsState()
 
     var mapMode by remember { mutableStateOf(MapDisplayMode.GOOGLE_MAPS) }
     var selectedFilter by remember { mutableStateOf(MapFilter.ALL) }
     var selectedZone by remember { mutableStateOf<DangerZone?>(null) }
+    var selectedStation by remember { mutableStateOf<SafeStation?>(null) }
     var showShareSheet by remember { mutableStateOf(false) }
+
+    // Search and Selection States
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchedLocation by remember { mutableStateOf<LocationPoint?>(null) }
+    var pinnedLocation by remember { mutableStateOf<LocationPoint?>(null) }
 
     val requestLocationPermission = com.example.ui.components.rememberLocationPermissionLauncher { granted, _ ->
         viewModel.onLocationPermissionResult(granted)
@@ -72,20 +88,49 @@ fun MapScreen(
 
     val activeShare = activeLiveShares.firstOrNull { it.isActive && it.expiresAtEpoch > System.currentTimeMillis() }
 
+    // Filter datasets according to chosen chip
+    val filteredZones = remember(dangerZones, selectedFilter) {
+        when (selectedFilter) {
+            MapFilter.ALL, MapFilter.DANGER_ZONES -> dangerZones.filter { it.isActive }
+            else -> emptyList()
+        }
+    }
+
+    val filteredIncidents = remember(activeIncidents, selectedFilter) {
+        when (selectedFilter) {
+            MapFilter.ALL, MapFilter.ACTIVE_INCIDENTS -> activeIncidents
+            else -> emptyList()
+        }
+    }
+
+    val filteredStations = remember(safeStations, selectedFilter) {
+        when (selectedFilter) {
+            MapFilter.ALL -> safeStations
+            MapFilter.POLICE_BOOTHS -> safeStations.filter { it.type == SafeStationType.POLICE || it.type == SafeStationType.WOMEN_HELP_DESK }
+            MapFilter.SHELTERS_HOSPITALS -> safeStations.filter { it.type == SafeStationType.HOSPITAL || it.type == SafeStationType.SHELTER }
+            else -> emptyList()
+        }
+    }
+
+    // Search results
+    val searchResults = remember(searchQuery) {
+        if (searchQuery.isBlank()) emptyList() else LocationHelper.searchLocations(searchQuery)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(SlateLight)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         // Location Permission Banner if not granted
         com.example.ui.components.LocationPermissionCard(
             hasPermission = uiState.hasLocationPermission,
             onRequestPermission = requestLocationPermission,
             title = "Enable GPS for Exact Map Navigation",
-            description = "High-accuracy geolocation is needed to render your live positioning beacon and compute distances to danger zones in Kumbakonam."
+            description = "High-accuracy geolocation renders your live beacon, computes distances to verified safe zones, and speeds up emergency dispatch in Tamil Nadu."
         )
 
-        // Active Live Location Sharing Alert Banner (if currently sharing)
+        // Active Live Location Sharing Alert Banner
         AnimatedVisibility(visible = activeShare != null) {
             if (activeShare != null) {
                 val remainingMinutes = ((activeShare.expiresAtEpoch - System.currentTimeMillis()) / 60000).coerceAtLeast(1)
@@ -118,14 +163,14 @@ fun MapScreen(
                             Column {
                                 Text(
                                     text = "SHARING LIVE GPS: ${activeShare.contactName}",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
                                     text = "Active for next $remainingMinutes mins • Consent-based session",
-                                    fontSize = 10.sp,
-                                    color = Color.White.copy(alpha = 0.85f)
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.9f)
                                 )
                             }
                         }
@@ -134,7 +179,7 @@ fun MapScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = EmergencyRed, contentColor = Color.White),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(32.dp)
+                            modifier = Modifier.height(34.dp)
                         ) {
                             Text("Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
@@ -143,11 +188,150 @@ fun MapScreen(
             }
         }
 
-        // Top Filter Chips & View Mode Toggle
+        // Top Search Bar for Locations across India & Tamil Nadu
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                    isSearchActive = it.isNotBlank()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_map_search"),
+                placeholder = {
+                    Text(
+                        "Search location in India (e.g. Chennai, Kumbakonam)...",
+                        fontSize = 12.sp,
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = SafetyTeal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            isSearchActive = false
+                            searchedLocation = null
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = SafetyTeal,
+                    unfocusedBorderColor = if (isDarkTheme) DarkBorder else SlateBorder,
+                    focusedContainerColor = if (isDarkTheme) DarkSurface else Color.White,
+                    unfocusedContainerColor = if (isDarkTheme) DarkSurface else Color.White
+                )
+            )
+
+            // Popular City Quick Suggestions
+            if (searchQuery.isEmpty() && !isSearchActive) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val popularHubs = listOf(
+                        LocationPoint(10.9602, 79.3845, "Kumbakonam Town Hall", "Thanjavur", "Tamil Nadu"),
+                        LocationPoint(10.7870, 79.1378, "Thanjavur Bus Stand", "Thanjavur", "Tamil Nadu"),
+                        LocationPoint(10.8050, 78.6856, "Trichy Chathiram", "Tiruchirappalli", "Tamil Nadu"),
+                        LocationPoint(13.0827, 80.2707, "Chennai Central", "Chennai", "Tamil Nadu"),
+                        LocationPoint(11.0168, 76.9558, "Coimbatore Gandhipuram", "Coimbatore", "Tamil Nadu"),
+                        LocationPoint(9.9252, 78.1198, "Madurai Periyar", "Madurai", "Tamil Nadu"),
+                        LocationPoint(12.9716, 77.5946, "Bengaluru Majestic", "Bengaluru", "Karnataka"),
+                        LocationPoint(28.6139, 77.2090, "New Delhi India Gate", "Delhi", "Delhi")
+                    )
+                    items(popularHubs) { hub ->
+                        SuggestionChip(
+                            onClick = {
+                                searchedLocation = hub
+                                pinnedLocation = hub
+                            },
+                            label = { Text(hub.landmark.split(" ").take(2).joinToString(" "), fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = if (isDarkTheme) DarkSurfaceVariant else Color(0xFFF1F5F9),
+                                labelColor = if (isDarkTheme) DarkTextPrimary else SlateTextDark
+                            ),
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                enabled = true,
+                                borderColor = if (isDarkTheme) DarkBorder else SlateBorder
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Search Results Dropdown List
+            if (isSearchActive && searchResults.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isDarkTheme) DarkSurface else Color.White,
+                    shadowElevation = 6.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isDarkTheme) DarkBorder else SlateBorder)
+                ) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        searchResults.take(4).forEach { loc ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        searchedLocation = loc
+                                        pinnedLocation = loc
+                                        searchQuery = loc.landmark
+                                        isSearchActive = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Place,
+                                    contentDescription = null,
+                                    tint = SafetyTeal,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(loc.landmark, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isDarkTheme) DarkTextPrimary else SlateTextDark)
+                                    Text("${loc.district}, ${loc.state}", fontSize = 10.sp, color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted)
+                                }
+                                val dist = LocationHelper.distanceInMeters(uiState.currentLocation.latitude, uiState.currentLocation.longitude, loc.latitude, loc.longitude)
+                                Text(
+                                    text = if (dist > 1000) "${dist / 1000} km" else "$dist m",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SafetyTeal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Layer Filter Chips & View Mode Toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -155,27 +339,29 @@ fun MapScreen(
                 modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                item {
+                items(MapFilter.values()) { filter ->
                     FilterChip(
-                        selected = selectedFilter == MapFilter.ALL,
-                        onClick = { selectedFilter = MapFilter.ALL },
-                        label = { Text("All (${dangerZones.filter { it.isActive }.size})", fontSize = 11.sp) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedFilter == MapFilter.DANGER_ZONES,
-                        onClick = { selectedFilter = MapFilter.DANGER_ZONES },
-                        label = { Text("Danger Zones", fontSize = 11.sp) },
-                        leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(14.dp)) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedFilter == MapFilter.POLICE_BOOTHS,
-                        onClick = { selectedFilter = MapFilter.POLICE_BOOTHS },
-                        label = { Text("Police", fontSize = 11.sp) },
-                        leadingIcon = { Icon(Icons.Default.LocalPolice, contentDescription = null, tint = SafeguardNavy, modifier = Modifier.size(14.dp)) }
+                        selected = selectedFilter == filter,
+                        onClick = { selectedFilter = filter },
+                        label = {
+                            val count = when (filter) {
+                                MapFilter.ALL -> dangerZones.count { it.isActive } + safeStations.size + activeIncidents.size
+                                MapFilter.DANGER_ZONES -> dangerZones.count { it.isActive }
+                                MapFilter.POLICE_BOOTHS -> safeStations.count { it.type == SafeStationType.POLICE || it.type == SafeStationType.WOMEN_HELP_DESK }
+                                MapFilter.SHELTERS_HOSPITALS -> safeStations.count { it.type == SafeStationType.HOSPITAL }
+                                MapFilter.ACTIVE_INCIDENTS -> activeIncidents.size
+                            }
+                            Text("${filter.label} ($count)", fontSize = 11.sp, fontWeight = if (selectedFilter == filter) FontWeight.Bold else FontWeight.Normal)
+                        },
+                        leadingIcon = {
+                            when (filter) {
+                                MapFilter.DANGER_ZONES -> Icon(Icons.Default.Warning, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(14.dp))
+                                MapFilter.POLICE_BOOTHS -> Icon(Icons.Default.LocalPolice, contentDescription = null, tint = SafetyTeal, modifier = Modifier.size(14.dp))
+                                MapFilter.SHELTERS_HOSPITALS -> Icon(Icons.Default.LocalHospital, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(14.dp))
+                                MapFilter.ACTIVE_INCIDENTS -> Icon(Icons.Default.Campaign, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(14.dp))
+                                else -> null
+                            }
+                        }
                     )
                 }
             }
@@ -189,7 +375,7 @@ fun MapScreen(
                 },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier.height(34.dp)
             ) {
                 Icon(
                     imageVector = if (mapMode == MapDisplayMode.GOOGLE_MAPS) Icons.Default.Radar else Icons.Default.Map,
@@ -205,23 +391,48 @@ fun MapScreen(
             }
         }
 
-        // Map View Area: Either Google Maps Platform or Radar Grid
+        // Map View Area: Either Google Maps Platform or Tactical Radar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.05f)
+                .weight(1.1f)
                 .padding(horizontal = 12.dp)
         ) {
             if (mapMode == MapDisplayMode.GOOGLE_MAPS) {
                 com.example.ui.components.GoogleMapsPlatformView(
                     userLocation = uiState.currentLocation,
-                    dangerZones = dangerZones,
-                    activeIncidents = activeIncidents,
+                    dangerZones = filteredZones,
+                    activeIncidents = filteredIncidents,
+                    safeStations = filteredStations,
+                    searchedLocation = searchedLocation,
+                    selectedPoint = pinnedLocation,
+                    isDarkTheme = isDarkTheme,
+                    onLocationPicked = { lat, lng ->
+                        val dist = LocationHelper.distanceInMeters(uiState.currentLocation.latitude, uiState.currentLocation.longitude, lat, lng)
+                        pinnedLocation = LocationPoint(
+                            latitude = lat,
+                            longitude = lng,
+                            landmark = "Pinned Map Location (${"%.4f".format(lat)}, ${"%.4f".format(lng)})",
+                            district = "Thanjavur",
+                            state = "Tamil Nadu"
+                        )
+                    },
                     onZoneSelected = { selectedZone = it },
+                    onStationSelected = { selectedStation = it },
+                    onReportAtLocation = { lat, lng ->
+                        val pt = LocationPoint(
+                            latitude = lat,
+                            longitude = lng,
+                            landmark = "Map Pin (${"%.4f".format(lat)}, ${"%.4f".format(lng)})",
+                            district = "Thanjavur",
+                            state = "Tamil Nadu"
+                        )
+                        viewModel.initiateReportAtLocation(pt)
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // Interactive Radar / Safety Canvas Map View
+                // Interactive Tactical Radar / Safety Canvas Map View
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -250,11 +461,13 @@ fun MapScreen(
                             strokeWidth = 1.dp.toPx()
                         )
 
-                        drawCircle(color = EmergencyRed.copy(alpha = 0.25f), radius = 35.dp.toPx(), center = Offset(center.x + 80.dp.toPx(), center.y - 45.dp.toPx()))
-                        drawCircle(color = WarningAmber.copy(alpha = 0.22f), radius = 28.dp.toPx(), center = Offset(center.x - 70.dp.toPx(), center.y + 60.dp.toPx()))
+                        // Render sample danger circles on radar
+                        drawCircle(color = EmergencyRed.copy(alpha = 0.3f), radius = 35.dp.toPx(), center = Offset(center.x + 80.dp.toPx(), center.y - 45.dp.toPx()))
+                        drawCircle(color = WarningAmber.copy(alpha = 0.25f), radius = 28.dp.toPx(), center = Offset(center.x - 70.dp.toPx(), center.y + 60.dp.toPx()))
 
-                        drawCircle(color = SafetyTeal, radius = 7.dp.toPx(), center = center)
-                        drawCircle(color = SafetyTeal.copy(alpha = 0.4f), radius = 16.dp.toPx(), center = center, style = Stroke(width = 2.dp.toPx()))
+                        // User GPS beacon
+                        drawCircle(color = SafetyTeal, radius = 8.dp.toPx(), center = center)
+                        drawCircle(color = SafetyTeal.copy(alpha = 0.45f), radius = 18.dp.toPx(), center = center, style = Stroke(width = 2.dp.toPx()))
                     }
 
                     Column(
@@ -264,7 +477,7 @@ fun MapScreen(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = SafeguardNavyCard.copy(alpha = 0.85f)
+                            color = SafeguardNavyCard.copy(alpha = 0.88f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -278,7 +491,7 @@ fun MapScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Offline Radar Grid • GPS Live",
+                                    text = "Tactical Radar Grid • GPS Live",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -289,7 +502,7 @@ fun MapScreen(
                 }
             }
 
-            // Floating action buttons on top of map (Quick SOS, Share Location, Google Maps Intent)
+            // Floating action buttons on top of map
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -346,14 +559,107 @@ fun MapScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // Pinned / Selected Location Action Banner (if user pinned or searched a place)
+        AnimatedVisibility(visible = pinnedLocation != null) {
+            pinnedLocation?.let { pin ->
+                val distanceMeters = LocationHelper.distanceInMeters(
+                    uiState.currentLocation.latitude,
+                    uiState.currentLocation.longitude,
+                    pin.latitude,
+                    pin.longitude
+                )
+                val distStr = if (distanceMeters > 1000) "${"%.1f".format(distanceMeters / 1000.0)} km" else "$distanceMeters meters"
 
-        // Verified Danger Zones List for Quick Navigation
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDarkTheme) DarkSurfaceVariant else Color(0xFFF1F5F9)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.Place, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = pin.landmark,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDarkTheme) DarkTextPrimary else SlateTextDark,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = "Distance: $distStr away • Lat: ${"%.4f".format(pin.latitude)}, Lng: ${"%.4f".format(pin.longitude)}",
+                                        fontSize = 10.sp,
+                                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { pinnedLocation = null }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = SlateTextMuted)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    EmergencyActions.openRouteInGoogleMaps(context, uiState.currentLocation, pin)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SafetyTealDark),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                            ) {
+                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Directions (Maps)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel.initiateReportAtLocation(pin)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = EmergencyRed),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                            ) {
+                                Icon(Icons.Default.AddLocation, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Report Hazard Here", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Verified Danger Zones & Safe Corridors List
         Text(
             text = "VERIFIED DANGER ZONES & SAFE CORRIDORS",
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = SlateTextMuted,
+            color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted,
             letterSpacing = 1.sp,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
         )
@@ -361,7 +667,7 @@ fun MapScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.1f)
+                .weight(1f)
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -370,7 +676,11 @@ fun MapScreen(
                 DangerZoneItemCard(
                     zone = zone,
                     currentLocation = uiState.currentLocation,
-                    onClick = { selectedZone = zone },
+                    isDarkTheme = isDarkTheme,
+                    onClick = {
+                        selectedZone = zone
+                        pinnedLocation = zone.location
+                    },
                     onNavigate = {
                         EmergencyActions.openRouteInGoogleMaps(context, uiState.currentLocation, zone.location)
                     }
@@ -400,7 +710,7 @@ fun MapScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = EmergencyRed)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(zone.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SafeguardNavy)
+                    Text(zone.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy)
                 }
             },
             text = {
@@ -408,38 +718,38 @@ fun MapScreen(
                     Text(
                         text = zone.description,
                         fontSize = 13.sp,
-                        color = SlateTextDark
+                        color = if (isDarkTheme) DarkTextPrimary else SlateTextDark
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "📍 Landmark: ${zone.location.landmark}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = SafeguardNavy
+                        color = SafetyTeal
                     )
                     Text(
                         text = "Radius: ${zone.radiusMeters} meters • Severity: ${zone.severity.name}",
                         fontSize = 11.sp,
-                        color = SlateTextMuted
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = SafetyTealLight
+                        color = if (isDarkTheme) DarkSurfaceVariant else SafetyTealLight
                     ) {
                         Text(
                             text = "Verified By: ${zone.approvedByAuthority}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = SafetyTealDark,
+                            color = if (isDarkTheme) SafetyTeal else SafetyTealDark,
                             modifier = Modifier.padding(6.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Active Until: $expiryDate",
-                        fontSize = 10.sp,
-                        color = SlateTextMuted
+                        fontSize = 11.sp,
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
                     )
                 }
             },
@@ -464,6 +774,77 @@ fun MapScreen(
         )
     }
 
+    // Detail Dialog for Selected Safe Station / Police Station
+    if (selectedStation != null) {
+        val stn = selectedStation!!
+        AlertDialog(
+            onDismissRequest = { selectedStation = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (stn.type == SafeStationType.HOSPITAL) Icons.Default.LocalHospital else Icons.Default.LocalPolice,
+                        contentDescription = null,
+                        tint = SafetyTeal
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stn.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Type: ${stn.type.label}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SafetyTeal
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "📍 Location: ${stn.location.landmark}",
+                        fontSize = 12.sp,
+                        color = if (isDarkTheme) DarkTextPrimary else SlateTextDark
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "📞 24/7 Official Contact: ${stn.phone}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDarkTheme) SafeGreen else SafeGreenDark
+                    )
+                    Text(
+                        text = "Jurisdiction: ${stn.jurisdiction}",
+                        fontSize = 11.sp,
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        EmergencyActions.dialEmergency(context, stn.phone)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SafeGreenDark)
+                ) {
+                    Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Call Station")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        EmergencyActions.openRouteInGoogleMaps(context, uiState.currentLocation, stn.location)
+                        selectedStation = null
+                    }
+                ) {
+                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Directions")
+                }
+            }
+        )
+    }
+
     // Live Location Sharing Sheet Dialog
     if (showShareSheet) {
         var selectedDurationMinutes by remember { mutableStateOf(30) }
@@ -476,7 +857,7 @@ fun MapScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.ShareLocation, contentDescription = null, tint = SafetyTealDark)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share My Live Location", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SafeguardNavy)
+                    Text("Share My Live Location", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy)
                 }
             },
             text = {
@@ -484,11 +865,11 @@ fun MapScreen(
                     Text(
                         text = "Share temporary, consent-based GPS tracking with your trusted contacts. You can revoke it anytime.",
                         fontSize = 12.sp,
-                        color = SlateTextMuted
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text("SELECT DURATION:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SlateTextDark)
+                    Text("SELECT DURATION:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isDarkTheme) DarkTextPrimary else SlateTextDark)
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -498,7 +879,7 @@ fun MapScreen(
                             FilterChip(
                                 selected = selectedDurationMinutes == mins,
                                 onClick = { selectedDurationMinutes = mins },
-                                label = { Text("${if (mins >= 60) "${mins/60}h" else "${mins}m"}") }
+                                label = { Text(if (mins >= 60) "${mins/60}h" else "${mins}m") }
                             )
                         }
                     }
@@ -522,9 +903,9 @@ fun MapScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "⚠️ Limitation Note: OS power management restricts background GPS. Keep app active for uninterrupted updates.",
+                        text = "⚠️ Limitation Note: OS power management restricts background GPS. Keep app active or foreground service enabled for updates.",
                         fontSize = 10.sp,
-                        color = SlateTextMuted
+                        color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted
                     )
                 }
             },
@@ -556,6 +937,7 @@ fun MapScreen(
 private fun DangerZoneItemCard(
     zone: DangerZone,
     currentLocation: LocationPoint,
+    isDarkTheme: Boolean,
     onClick: () -> Unit,
     onNavigate: () -> Unit
 ) {
@@ -571,8 +953,10 @@ private fun DangerZoneItemCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .border(1.dp, SlateBorder, RoundedCornerShape(14.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+            .border(1.dp, if (isDarkTheme) DarkBorder else SlateBorder, RoundedCornerShape(14.dp)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDarkTheme) DarkSurface else Color.White
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -580,9 +964,15 @@ private fun DangerZoneItemCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (zone.severity == com.example.model.ZoneSeverity.HIGH) EmergencyRedLight else WarningAmberLight),
+                    .background(
+                        if (zone.severity == ZoneSeverity.HIGH) {
+                            if (isDarkTheme) Color(0xFF5C101B) else EmergencyRedLight
+                        } else {
+                            if (isDarkTheme) Color(0xFF452B05) else WarningAmberLight
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -593,7 +983,7 @@ private fun DangerZoneItemCard(
                         else -> Icons.Default.Warning
                     },
                     contentDescription = null,
-                    tint = if (zone.severity == com.example.model.ZoneSeverity.HIGH) EmergencyRed else WarningAmber
+                    tint = if (zone.severity == ZoneSeverity.HIGH) EmergencyRedBright else WarningAmber
                 )
             }
 
@@ -604,19 +994,19 @@ private fun DangerZoneItemCard(
                     text = zone.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
-                    color = SafeguardNavy
+                    color = if (isDarkTheme) DarkTextPrimary else SafeguardNavy
                 )
                 Text(
                     text = zone.location.landmark,
                     fontSize = 11.sp,
-                    color = SlateTextMuted,
+                    color = if (isDarkTheme) DarkTextSecondary else SlateTextMuted,
                     maxLines = 1
                 )
                 Text(
-                    text = "${distance / 1000.0} km away • Verified Danger Zone",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (zone.severity == com.example.model.ZoneSeverity.HIGH) EmergencyRedDark else SafetyTealDark
+                    text = "${"%.1f".format(distance / 1000.0)} km away • Verified Danger Zone",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (zone.severity == ZoneSeverity.HIGH) EmergencyRedBright else SafetyTeal
                 )
             }
 
@@ -624,7 +1014,7 @@ private fun DangerZoneItemCard(
                 Icon(
                     imageVector = Icons.Default.Directions,
                     contentDescription = "Navigate",
-                    tint = SafetyTealDark
+                    tint = SafetyTeal
                 )
             }
         }

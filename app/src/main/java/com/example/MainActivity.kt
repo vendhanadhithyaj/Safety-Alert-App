@@ -236,29 +236,31 @@ fun SafeguardTopAppBar(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .weight(1f, fill = false)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onShowEntrance)
                     .padding(4.dp)
                     .testTag("app_bar_brand_header")
             ) {
-                // Official Safeguard Logo in a clean white rounded pill
+                // Official Safeguard Logo in a clean badge
                 Surface(
                     color = Color.White,
                     shape = RoundedCornerShape(8.dp),
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.height(38.dp).width(58.dp)
+                    shadowElevation = 3.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.6f)),
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.safeguard_logo),
-                        contentDescription = "SAFEGUARD Logo",
+                        painter = painterResource(id = R.drawable.safeguard_official_logo),
+                        contentDescription = "SAFEGUARD Emblem",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().padding(3.dp)
+                        modifier = Modifier.fillMaxSize().padding(2.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "SAFEGUARD",
@@ -285,7 +287,8 @@ fun SafeguardTopAppBar(
                         text = "One tap to alert. A network to protect.",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFFCBD5E1)
+                        color = Color(0xFFCBD5E1),
+                        maxLines = 1
                     )
                 }
             }

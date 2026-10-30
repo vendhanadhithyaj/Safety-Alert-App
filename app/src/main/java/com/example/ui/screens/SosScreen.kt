@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,12 +22,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.model.LocationPoint
 import com.example.model.SosIncident
 import com.example.model.SosStatus
@@ -135,28 +139,40 @@ fun SosScreen(
                     }
                 }
 
-                // Quick Strobe & Siren toggles
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Quick Strobe & Siren toggles (Accessible 48dp touch targets)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     FilledTonalIconButton(
                         onClick = { viewModel.toggleStrobeFlashlight() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = if (uiState.isStrobeActive) WarningAmberLight else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (uiState.isStrobeActive) WarningAmber else MaterialTheme.colorScheme.onSurface
+                            containerColor = if (uiState.isStrobeActive) WarningAmber else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (uiState.isStrobeActive) Color.White else MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.size(44.dp).testTag("button_strobe_flashlight")
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("button_strobe_flashlight")
                     ) {
-                        Icon(Icons.Default.FlashlightOn, contentDescription = "Flashlight Strobe")
+                        Icon(
+                            imageVector = if (uiState.isStrobeActive) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,
+                            contentDescription = "Flashlight Strobe",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
 
                     FilledTonalIconButton(
                         onClick = { viewModel.toggleSirenSound() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = if (uiState.isSirenPlaying) EmergencyRedLight else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (uiState.isSirenPlaying) EmergencyRed else MaterialTheme.colorScheme.onSurface
+                            containerColor = if (uiState.isSirenPlaying) EmergencyRed else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (uiState.isSirenPlaying) Color.White else MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.size(44.dp).testTag("button_siren_alarm")
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("button_siren_alarm")
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Siren Alert")
+                        Icon(
+                            imageVector = if (uiState.isSirenPlaying) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "Emergency Loud Siren",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
@@ -247,6 +263,56 @@ fun SosScreen(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
+        // SAFEGUARD Official Safety Monitoring Banner with Official Brand Logo
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(10.dp),
+                    shadowElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SafetyTeal.copy(alpha = 0.6f)),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.safeguard_official_logo),
+                        contentDescription = "SAFEGUARD Official Safety Network Logo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().padding(3.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "SAFEGUARD EMERGENCY GRID",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyTealDark,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "One-tap emergency dispatch to Tamil Nadu Police (112), EMS & Family Buddies.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+
         // Buddy Network Guard Status Pill
         val activeBuddyCount = buddies.count { it.isTrustedForSos }
         Card(
@@ -264,12 +330,18 @@ fun SosScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Diversity3,
-                        contentDescription = null,
-                        tint = SafetyTeal,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.safeguard_official_logo),
+                            contentDescription = "Safeguard Emblem",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().padding(1.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "BUDDY PROTECTION: $activeBuddyCount GUARDIANS ARMED",
